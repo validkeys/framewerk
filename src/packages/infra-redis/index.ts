@@ -1,15 +1,28 @@
-import { IRedisService } from "../core-contracts/index.ts"
+import { IRedisService } from "../core-contracts/index.ts";
+import { ok, err } from "neverthrow";
+import { RedisConnectionError } from "../core-contracts/errors.ts";
 
 export const makeRedisService = (): IRedisService => {
-  const obj: Record<string, any> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const obj: Record<string, any> = {};
   return {
-    get: async (key: string): Promise<string | null> => {
-      // Implementation for getting a value from Redis
-      return obj[key] || null
+    get: async (key: string) => {
+      try {
+        // Simulate Redis get
+        const value = obj[key] ?? null;
+        return ok(value);
+      } catch (e) {
+        return err(new RedisConnectionError("Failed to get value from Redis", e));
+      }
     },
-    set: async (key: string, value: string, ttl?: number): Promise<void> => {
-      // Implementation for setting a value in Redis with optional TTL
-      obj[key] = value
+    set: async (key: string, value: string) => {
+      try {
+        // Simulate Redis set
+        obj[key] = value;
+        return ok(undefined);
+      } catch (e) {
+        return err(new RedisConnectionError("Failed to set value in Redis", e));
+      }
     },
-  }
-}
+  };
+};

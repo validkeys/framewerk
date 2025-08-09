@@ -10,7 +10,28 @@
     "resolveJsonModule": true,
     "outDir": "dist",
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "baseUrl": "src",
+    "paths": {
+      "@framewerk/contracts/*": [
+        "packages/core-contracts/*"
+      ],
+      "@framewerk/std/*": [
+        "packages/core-std/*"
+      ],
+      "@framewerk/accountManager/*": [
+        "packages/feat-accountManager/*"
+      ],
+      "@framewerk/userManager/*": [
+        "packages/feat-userManager/*"
+      ],
+      "@framewerk/infra-redis/*": [
+        "packages/infra-redis/*"
+      ],
+    }
   },
-  "include": ["src/**/*", "vitest.config.ts"]
+  "include": [
+    "src/**/*",
+    "vitest.config.ts"
+  ]
 }
