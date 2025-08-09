@@ -1,4 +1,4 @@
-// Enhanced DI implementation with runtime-based type safety
+// Enhanced DI with compile-time and runtime dependency checking
 
 export class ServiceInstance<Name extends string, T> {
   constructor(
@@ -30,44 +30,64 @@ export function Service<Name extends string, T>(
   return new ServiceInstance(name, contract);
 }
 
-// Create a runtime for type-safe dependency injection
+// The magic: Tag generators with their dependencies
+export type WithDeps<TGen, TDeps> = TGen & { __deps?: TDeps };
+
+// Helper to declare dependencies
+export function deps<TDeps extends Record<string, any>>() {
+  return <TGen extends (...args: any[]) => any>(
+    generator: TGen
+  ): WithDeps<TGen, TDeps> => {
+    return generator as WithDeps<TGen, TDeps>;
+  };
+}
+
+// Extract dependency types from a generator
+type ExtractDeps<T> = T extends WithDeps<any, infer D> ? D : {};
+
+// Merge dependency types
+type MergeDeps<T extends Record<string, any>, U extends Record<string, any>> = T & U;
+
+// Create a runtime that enforces dependencies at compile time
 export function createRuntime<T extends Record<string, ServiceInstance<any, any>>>(services: T) {
   type ServiceMap = {
     [K in keyof T]: T[K] extends ServiceInstance<any, infer Contract> ? Contract : never
   };
   
   return {
-    services,
-    
-    async run<TReturn>(
-      generator: Generator<any, TReturn, any> | AsyncGenerator<any, TReturn, any>,
-      implementations: ServiceMap
-    ): Promise<TReturn> {
-      return runCore(generator, implementations);
+    // Type-safe run that requires all dependencies
+    run<TGen extends WithDeps<any, any>>(
+      generator: TGen,
+      implementations: ExtractDeps<TGen> extends ServiceMap 
+        ? ServiceMap
+        : ExtractDeps<TGen> extends Partial<ServiceMap>
+          ? Required<Pick<ServiceMap, Extract<keyof ExtractDeps<TGen>, keyof ServiceMap>>>
+          : never
+    ): Promise<TGen extends (...args: any[]) => AsyncGenerator<any, infer R, any> ? R 
+                : TGen extends (...args: any[]) => Generator<any, infer R, any> ? R 
+                : never> {
+      return runCore(
+        typeof generator === 'function' ? generator() : generator, 
+        implementations as any
+      );
     },
     
-    runSync<TReturn>(
-      generator: Generator<any, TReturn, any>,
-      implementations: ServiceMap
-    ): TReturn {
-      return runSyncCore(generator, implementations);
-    },
-    
-    // Additional helper to create a scoped runtime with partial implementations
     withDefaults(defaults: Partial<ServiceMap>) {
       return {
-        async run<TReturn>(
-          generator: Generator<any, TReturn, any> | AsyncGenerator<any, TReturn, any>,
-          implementations: Partial<ServiceMap> = {}
-        ): Promise<TReturn> {
-          return runCore(generator, { ...defaults, ...implementations } as ServiceMap);
-        },
-        
-        runSync<TReturn>(
-          generator: Generator<any, TReturn, any>,
-          implementations: Partial<ServiceMap> = {}
-        ): TReturn {
-          return runSyncCore(generator, { ...defaults, ...implementations } as ServiceMap);
+        run<TGen extends WithDeps<any, any>>(
+          generator: TGen,
+          implementations: Omit<ExtractDeps<TGen>, keyof typeof defaults> extends ServiceMap 
+            ? Omit<ServiceMap, keyof typeof defaults>
+            : Omit<ExtractDeps<TGen>, keyof typeof defaults> extends Partial<ServiceMap>
+              ? Required<Pick<ServiceMap, Extract<keyof Omit<ExtractDeps<TGen>, keyof typeof defaults>, keyof ServiceMap>>>
+              : {}
+        ): Promise<TGen extends (...args: any[]) => AsyncGenerator<any, infer R, any> ? R 
+                    : TGen extends (...args: any[]) => Generator<any, infer R, any> ? R 
+                    : never> {
+          return runCore(
+            typeof generator === 'function' ? generator() : generator,
+            { ...defaults, ...implementations } as any
+          );
         }
       };
     }
@@ -103,34 +123,6 @@ async function runCore<TReturn>(
   return result.value;
 }
 
-function runSyncCore<TReturn>(
-  generator: Generator<any, TReturn, any>,
-  services: Record<string, any>
-): TReturn {
-  let result = generator.next();
-  
-  while (!result.done) {
-    if (result.value instanceof ServiceInstance) {
-      const impl = services[result.value.name];
-      if (impl === undefined) {
-        throw new Error(`Service '${result.value.name}' not provided`);
-      }
-      result = generator.next(impl);
-    } else if (isGenerator(result.value)) {
-      const nested = runSyncCore(result.value, services);
-      result = generator.next(nested);
-    } else {
-      result = generator.next(result.value);
-    }
-  }
-  
-  return result.value;
-}
-
-// Keep the original functions for backward compatibility
-export const run = runCore;
-export const runSync = runSyncCore;
-
 // Helper functions
 function isAsyncGenerator(value: any): value is AsyncGenerator {
   return value && typeof value[Symbol.asyncIterator] === 'function';
@@ -145,20 +137,11 @@ async function* toAsyncGenerator<T, TReturn, TNext>(
 ): AsyncGenerator<T, TReturn, TNext> {
   let result = gen.next();
   while (!result.done) {
-    try {
-      const value = yield result.value;
-      result = gen.next(value as TNext);
-    } catch (e) {
-      result = gen.throw!(e);
-    }
+    const value = yield result.value;
+    result = gen.next(value as TNext);
   }
   return result.value;
 }
 
-export default {
-  Service,
-  createRuntime,
-  run,
-  runSync,
-  ServiceInstance
-};
+// Backwards compatibility
+export const run = runCore;
