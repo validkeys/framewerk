@@ -1,4 +1,8 @@
-import { IRedisService, IUserManagerService } from "../core-contracts/index.ts"
+import {
+  IAccountManagerService,
+  IRedisService,
+  IUserManagerService,
+} from "../core-contracts/index.ts"
 
 // Define the context for the AccountManager service
 export interface AccountManagerCtx {
@@ -6,17 +10,14 @@ export interface AccountManagerCtx {
   UserManager: IUserManagerService
 }
 
-export const makeAccountManagerService = (ctx: AccountManagerCtx) => {
+export const makeAccountManagerService = (
+  ctx: AccountManagerCtx
+): IAccountManagerService => {
   return {
     async listAccounts() {
       // Implementation for listing accounts
       const accounts = await ctx.Redis.get("accounts")
       return JSON.parse(accounts || "[]")
-    },
-    async getUserDetails(userId: string) {
-      // Implementation for getting user details
-      const user = await ctx.UserManager.listUsers()
-      return user.find((u) => u.id === userId)
     },
   }
 }
