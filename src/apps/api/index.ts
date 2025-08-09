@@ -21,7 +21,9 @@ const startServer = async () => {
     UserManager: userManager,
   })
 
-  const result = await accountManager.listAccounts()
+  const result = await accountManager.listAccounts({
+    foo: "bar"
+  })
   console.log("Accounts:", result)
 }
 

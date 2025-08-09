@@ -1,23 +1,13 @@
-export type IAccount = {
-  id: string
-  name: string
-}
+import { UserEntity } from "./entities.ts"
 
-export type IUser = {
-  id: string
-  username: string
-  email: string
-}
-
-export interface IAccountManagerService {
-  listAccounts(): Promise<IAccount[]>
-}
 
 export interface IUserManagerService {
-  listUsers(): Promise<IUser[]>
+  listUsers(): Promise<UserEntity[]>
 }
 
 export interface IRedisService {
   get(key: string): Promise<string | null>
   set(key: string, value: string, ttl?: number): Promise<void>
 }
+
+export * from "./accountManager/index.ts"
