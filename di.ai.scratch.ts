@@ -1,6 +1,6 @@
 // Example implementation (without tests)
 
-import { Service, run } from './di.ts';
+import { Service, run } from './di.v1.ts';
 
 // Define your services
 export const Database = Service('Database', {

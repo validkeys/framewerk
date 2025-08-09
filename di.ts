@@ -1,72 +1,101 @@
-// The entire implementation supporting both sync and async generators
+// Enhanced DI implementation with runtime-based type safety
 
-// Simple type for service shape
-type ServiceShape = Record<string, (...args: any[]) => any>;
-
-// Service instance with metadata
-export class ServiceInstance<T extends ServiceShape> {
+export class ServiceInstance<Name extends string, T> {
   constructor(
-    public readonly name: string,
-    public readonly shape: T
+    public readonly name: Name,
+    public readonly contract: T
   ) {}
   
-  // Make it yieldable in sync generators
-  *[Symbol.iterator](): Generator<ServiceInstance<T>, T, T> {
+  *[Symbol.iterator](): Generator<ServiceInstance<Name, T>, T, T> {
     return yield this;
   }
   
-  // Make it yieldable in async generators
-  async *[Symbol.asyncIterator](): AsyncGenerator<ServiceInstance<T>, T, T> {
+  async *[Symbol.asyncIterator](): AsyncGenerator<ServiceInstance<Name, T>, T, T> {
     return yield this;
+  }
+  
+  make(implementation: T): T {
+    return implementation;
+  }
+  
+  mock(partial: Partial<T>): T {
+    return partial as T;
   }
 }
 
-// Service constructor function
-export function Service<T extends ServiceShape>(
-  name: string, 
-  shape: T
-): ServiceInstance<T> {
-  return new ServiceInstance(name, shape);
+export function Service<Name extends string, T>(
+  name: Name, 
+  contract: T
+): ServiceInstance<Name, T> {
+  return new ServiceInstance(name, contract);
 }
 
-// Type to extract services from generators
-type ExtractServices<G> = G extends Generator<infer S, any, any> | AsyncGenerator<infer S, any, any>
-  ? S extends ServiceInstance<infer T>
-    ? T
-    : never
-  : never;
+// Create a runtime for type-safe dependency injection
+export function createRuntime<T extends Record<string, ServiceInstance<any, any>>>(services: T) {
+  type ServiceMap = {
+    [K in keyof T]: T[K] extends ServiceInstance<any, infer Contract> ? Contract : never
+  };
+  
+  return {
+    services,
+    
+    async run<TReturn>(
+      generator: Generator<any, TReturn, any> | AsyncGenerator<any, TReturn, any>,
+      implementations: ServiceMap
+    ): Promise<TReturn> {
+      return runCore(generator, implementations);
+    },
+    
+    runSync<TReturn>(
+      generator: Generator<any, TReturn, any>,
+      implementations: ServiceMap
+    ): TReturn {
+      return runSyncCore(generator, implementations);
+    },
+    
+    // Additional helper to create a scoped runtime with partial implementations
+    withDefaults(defaults: Partial<ServiceMap>) {
+      return {
+        async run<TReturn>(
+          generator: Generator<any, TReturn, any> | AsyncGenerator<any, TReturn, any>,
+          implementations: Partial<ServiceMap> = {}
+        ): Promise<TReturn> {
+          return runCore(generator, { ...defaults, ...implementations } as ServiceMap);
+        },
+        
+        runSync<TReturn>(
+          generator: Generator<any, TReturn, any>,
+          implementations: Partial<ServiceMap> = {}
+        ): TReturn {
+          return runSyncCore(generator, { ...defaults, ...implementations } as ServiceMap);
+        }
+      };
+    }
+  };
+}
 
-// Type for service implementations
-type ServiceImpls<G> = {
-  [K in ExtractServices<G> extends never ? never : ExtractServices<G>['name']]: 
-    Extract<ExtractServices<G>, { name: K }>['shape']
-};
-
-// Main run function - now supports both sync and async generators
-export async function run<T, G extends Generator<any, T, any> | AsyncGenerator<any, T, any>>(
-  generator: G,
-  services: ServiceImpls<G>
-): Promise<T> {
-  // Convert sync generator to async generator if needed
+// Core run implementation
+async function runCore<TReturn>(
+  generator: Generator<any, TReturn, any> | AsyncGenerator<any, TReturn, any>,
+  services: Record<string, any>
+): Promise<TReturn> {
   const asyncGen = isAsyncGenerator(generator) 
     ? generator 
-    : toAsyncGenerator(generator as Generator<any, T, any>);
+    : toAsyncGenerator(generator as Generator<any, TReturn, any>);
   
   let result = await asyncGen.next();
   
   while (!result.done) {
     if (result.value instanceof ServiceInstance) {
       const impl = services[result.value.name];
-      if (!impl) {
+      if (impl === undefined) {
         throw new Error(`Service '${result.value.name}' not provided`);
       }
       result = await asyncGen.next(impl);
     } else if (isAsyncGenerator(result.value) || isGenerator(result.value)) {
-      // Handle nested generators
-      const nested = await run(result.value, services);
+      const nested = await runCore(result.value, services);
       result = await asyncGen.next(nested);
     } else {
-      // Pass through other values
       result = await asyncGen.next(result.value);
     }
   }
@@ -74,7 +103,35 @@ export async function run<T, G extends Generator<any, T, any> | AsyncGenerator<a
   return result.value;
 }
 
-// Helper type guards
+function runSyncCore<TReturn>(
+  generator: Generator<any, TReturn, any>,
+  services: Record<string, any>
+): TReturn {
+  let result = generator.next();
+  
+  while (!result.done) {
+    if (result.value instanceof ServiceInstance) {
+      const impl = services[result.value.name];
+      if (impl === undefined) {
+        throw new Error(`Service '${result.value.name}' not provided`);
+      }
+      result = generator.next(impl);
+    } else if (isGenerator(result.value)) {
+      const nested = runSyncCore(result.value, services);
+      result = generator.next(nested);
+    } else {
+      result = generator.next(result.value);
+    }
+  }
+  
+  return result.value;
+}
+
+// Keep the original functions for backward compatibility
+export const run = runCore;
+export const runSync = runSyncCore;
+
+// Helper functions
 function isAsyncGenerator(value: any): value is AsyncGenerator {
   return value && typeof value[Symbol.asyncIterator] === 'function';
 }
@@ -83,7 +140,6 @@ function isGenerator(value: any): value is Generator {
   return value && typeof value[Symbol.iterator] === 'function' && !isAsyncGenerator(value);
 }
 
-// Convert sync generator to async generator
 async function* toAsyncGenerator<T, TReturn, TNext>(
   gen: Generator<T, TReturn, TNext>
 ): AsyncGenerator<T, TReturn, TNext> {
@@ -99,5 +155,10 @@ async function* toAsyncGenerator<T, TReturn, TNext>(
   return result.value;
 }
 
-// Export everything
-export default { Service, run };
+export default {
+  Service,
+  createRuntime,
+  run,
+  runSync,
+  ServiceInstance
+};
