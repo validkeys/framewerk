@@ -10,6 +10,9 @@ export * from "./handler.ts"
 // Service system exports  
 export * from "./service.ts"
 
+// Contract system exports
+export * from "./contracts.ts"
+
 // Type system exports
 export * from "./types.ts"
 
