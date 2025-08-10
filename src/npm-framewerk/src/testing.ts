@@ -3,29 +3,12 @@
  *
  * This module provides comprehensive testing utilities for services built with framewerk,
  * including mock helpers, assertion utilities, and test patterns.
- *
- * @example
- * ```typescript
- * // Basic service testing
- * const testHarness = createServiceTestHarness(userService, {
- *   database: createMockDatabase(),
- *   logger: createMockLogger()
- * })
- *
- * // Test handler execution
- * const result = await testHarness.callHandler('getUser', { id: '123' })
- * expect(result.isOk()).toBe(true)
- *
- * // Assert on mock calls
- * expect(testHarness.deps.database.findUser).toHaveBeenCalledWith('123')
- * ```
  */
 
-import { expect, describe, it, test, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
+import { vi } from 'vitest'
 import { ok, err, type Result } from 'neverthrow'
-import type { ServiceDefinition, HandlerDefinition } from './service'
-import type { MergedContext, HandlerOptions } from './types'
-import type { EnhancedServiceMetadata } from './introspection'
+import type { ServiceDefinition } from './service.ts'
+import type { HandlerOptions, HandlerContext } from './types.ts'
 
 /**
  * Service test harness for comprehensive testing
@@ -34,23 +17,23 @@ export interface ServiceTestHarness<
   TService extends ServiceDefinition<string, TDeps>,
   TDeps extends Record<string, unknown>
 > {
-  /** The service definition */
-  service: TService
-  /** Mock dependencies */
-  deps: TDeps
   /** Service instance with injected dependencies */
-  instance: ReturnType<TService['make']>
+  service: ReturnType<TService['make']>
+  /** Mock dependencies */
+  mockDependencies: TDeps
   /** Call a handler on the service instance */
   callHandler: <TInput, TOutput, TError>(
     handlerName: string,
     input: TInput,
     options?: HandlerOptions,
-    context?: Record<string, unknown>
+    context?: HandlerContext
   ) => Promise<Result<TOutput, TError>>
-  /** Reset all mocks */
-  resetMocks: () => void
   /** Assert that a mock was called */
   assertMockCalled: (mockPath: string, times?: number) => void
+  /** Assert that a mock was called with specific arguments */
+  assertMockCalledWith: (mockPath: string, ...args: unknown[]) => void
+  /** Reset all mocks */
+  resetMocks: () => void
 }
 
 /**
@@ -64,72 +47,75 @@ export function createServiceTestHarness<
   dependencies: TDeps
 ): ServiceTestHarness<TService, TDeps> {
   
-  const instance = service.make(dependencies)
-
-  const callHandler = async <TInput, TOutput, TError>(
-    handlerName: string,
-    input: TInput,
-    options?: HandlerOptions,
-    context?: Record<string, unknown>
-  ): Promise<Result<TOutput, TError>> => {
-    // Type assertion to access handler - this is safe as we know the structure
-    const handlerMethod = (instance as any)[handlerName]
-    
-    if (!handlerMethod) {
-      throw new Error(`Handler '${handlerName}' not found in service '${service.name}'`)
-    }
-
-    const defaultContext = {
-      requestId: `test-${Date.now()}`,
-      traceId: `test-trace-${Math.random()}`,
-      ...context
-    }
-
-    return await handlerMethod(input, options, defaultContext)
-  }
-
-  const resetMocks = () => {
-    Object.values(dependencies).forEach(dep => {
-      if (dep && typeof dep === 'object') {
-        Object.values(dep).forEach(method => {
-          if (typeof method === 'function' && 'mockReset' in method) {
-            (method as any).mockReset()
-          }
-        })
-      }
-    })
-  }
-
-  const assertMockCalled = (mockPath: string, times?: number) => {
-    const pathParts = mockPath.split('.')
-    let current: any = dependencies
-    
-    for (const part of pathParts) {
-      current = current[part]
-      if (!current) {
-        throw new Error(`Mock path '${mockPath}' not found`)
-      }
-    }
-
-    if (typeof current !== 'function' || !('mock' in current)) {
-      throw new Error(`Path '${mockPath}' is not a mock function`)
-    }
-
-    if (times !== undefined) {
-      expect(current).toHaveBeenCalledTimes(times)
-    } else {
-      expect(current).toHaveBeenCalled()
-    }
-  }
+  const serviceInstance = service.make(dependencies)
 
   return {
-    service,
-    deps: dependencies,
-    instance,
-    callHandler,
-    resetMocks,
-    assertMockCalled
+    service: serviceInstance,
+    mockDependencies: dependencies,
+    
+    callHandler: async <TInput, TOutput, TError>(
+      handlerName: string, 
+      input: TInput,
+      options?: HandlerOptions,
+      context?: HandlerContext
+    ): Promise<Result<TOutput, TError>> => {
+      const handler = (serviceInstance as Record<string, unknown>)[handlerName]
+      if (!handler || typeof handler !== 'function') {
+        throw new Error(`Handler '${handlerName}' not found in service`)
+      }
+      
+      const defaultContext = {
+        requestId: `test-${Date.now()}`,
+        traceId: `test-trace-${Math.random()}`,
+        ...context
+      }
+      
+      return handler(input, options, defaultContext) as Promise<Result<TOutput, TError>>
+    },
+
+    assertMockCalled: (mockPath: string, times?: number) => {
+      const mockFn = getMockByPath(dependencies, mockPath)
+      if (times !== undefined) {
+        expect(mockFn).toHaveBeenCalledTimes(times)
+      } else {
+        expect(mockFn).toHaveBeenCalled()
+      }
+    },
+
+    assertMockCalledWith: (mockPath: string, ...args: unknown[]) => {
+      const mockFn = getMockByPath(dependencies, mockPath)
+      expect(mockFn).toHaveBeenCalledWith(...args)
+    },
+
+    resetMocks: () => {
+      resetAllMocks(dependencies)
+    }
   }
+}
+
+/**
+ * Helper function to get a mock by path (e.g., "database.findUser")
+ */
+function getMockByPath(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce((current: unknown, key: string) => 
+    current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined, 
+    obj
+  )
+}
+
+/**
+ * Helper function to reset all mocks in an object
+ */
+function resetAllMocks(obj: Record<string, unknown>): void {
+  if (!obj || typeof obj !== 'object') return
+  
+  Object.values(obj).forEach(value => {
+    if (typeof value === 'function' && 'mockReset' in value) {
+      (value as { mockReset: () => void }).mockReset()
+    } else if (typeof value === 'object' && value !== null) {
+      resetAllMocks(value as Record<string, unknown>)
+    }
+  })
 }
 
 /**
@@ -145,8 +131,15 @@ export const MockFactories = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    transaction: vi.fn(),
-    close: vi.fn()
+    findUser: vi.fn(),
+    createUser: vi.fn(),
+    updateUser: vi.fn(),
+    deleteUser: vi.fn(),
+    listUsers: vi.fn(),
+    findByEmail: vi.fn(),
+    exists: vi.fn(),
+    count: vi.fn(),
+    transaction: vi.fn()
   }),
 
   /**
@@ -157,7 +150,16 @@ export const MockFactories = {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    child: vi.fn(() => MockFactories.logger())
+    trace: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnValue({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
+      fatal: vi.fn()
+    })
   }),
 
   /**
@@ -167,8 +169,9 @@ export const MockFactories = {
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
-    patch: vi.fn()
+    request: vi.fn()
   }),
 
   /**
@@ -179,7 +182,9 @@ export const MockFactories = {
     set: vi.fn(),
     delete: vi.fn(),
     clear: vi.fn(),
-    has: vi.fn()
+    has: vi.fn(),
+    keys: vi.fn(),
+    ttl: vi.fn()
   }),
 
   /**
@@ -190,32 +195,35 @@ export const MockFactories = {
     on: vi.fn(),
     off: vi.fn(),
     once: vi.fn(),
-    removeAllListeners: vi.fn()
+    removeAllListeners: vi.fn(),
+    listenerCount: vi.fn()
   })
 }
 
 /**
- * Test data builders for common patterns
+ * Test data builder for creating test fixtures
  */
 export class TestDataBuilder<T> {
   private data: Partial<T> = {}
 
-  constructor(private defaults: T) {}
+  constructor(private readonly defaults: T) {}
 
   /**
-   * Set a specific field
+   * Set a specific field value
    */
-  with<K extends keyof T>(key: K, value: T[K]): this {
-    this.data[key] = value
-    return this
+  with<K extends keyof T>(field: K, value: T[K]): TestDataBuilder<T> {
+    const newBuilder = new TestDataBuilder(this.defaults)
+    newBuilder.data = { ...this.data, [field]: value }
+    return newBuilder
   }
 
   /**
-   * Set multiple fields
+   * Set multiple field values
    */
-  withFields(fields: Partial<T>): this {
-    Object.assign(this.data, fields)
-    return this
+  withMany(values: Partial<T>): TestDataBuilder<T> {
+    const newBuilder = new TestDataBuilder(this.defaults)
+    newBuilder.data = { ...this.data, ...values }
+    return newBuilder
   }
 
   /**
@@ -226,16 +234,14 @@ export class TestDataBuilder<T> {
   }
 
   /**
-   * Build multiple objects with different variations
+   * Build multiple objects with variations
    */
-  buildMany(count: number, variations?: Array<Partial<T>>): T[] {
+  buildMany(count: number, variations: Partial<T>[] = []): T[] {
     const results: T[] = []
-    
     for (let i = 0; i < count; i++) {
-      const variation = variations?.[i] || {}
+      const variation = variations[i] || {}
       results.push({ ...this.defaults, ...this.data, ...variation })
     }
-    
     return results
   }
 }
@@ -248,34 +254,43 @@ export function createTestDataBuilder<T>(defaults: T): TestDataBuilder<T> {
 }
 
 /**
- * Service metadata testing utilities
+ * Result testing utilities for neverthrow
  */
-export const ServiceTestUtils = {
+export const ResultTestUtils = {
   /**
-   * Assert that a service has specific handlers
+   * Assert that a result is Ok and return the value
    */
-  assertHasHandlers(service: ServiceDefinition<string, Record<string, unknown>>, expectedHandlers: string[]): void {
-    const metadata = service.getMetadata()
-    const handlerNames = Object.keys(metadata.handlers)
-    
-    expectedHandlers.forEach(handler => {
-      expect(handlerNames).toContain(handler)
-    })
+  expectOk: <T, E>(result: Result<T, E>): T => {
+    if (result.isErr()) {
+      throw new Error(`Expected Ok but got Err: ${result.error}`)
+    }
+    return result.value
   },
 
   /**
-   * Assert that a service has specific metadata
+   * Assert that a result is Err and return the error
    */
-  assertMetadata(
-    metadata: EnhancedServiceMetadata,
-    expected: Partial<EnhancedServiceMetadata>
-  ): void {
-    if (expected.name) expect(metadata.name).toBe(expected.name)
-    if (expected.version) expect(metadata.version).toBe(expected.version)
-    if (expected.tags) expect(metadata.tags).toEqual(expect.arrayContaining(expected.tags))
-    if (expected.dependencyTypes) {
-      expect(metadata.dependencyTypes).toEqual(expect.arrayContaining(expected.dependencyTypes))
+  expectErr: <T, E>(result: Result<T, E>): E => {
+    if (result.isOk()) {
+      throw new Error(`Expected Err but got Ok: ${result.value}`)
     }
+    return result.error
+  },
+
+  /**
+   * Assert that a result is Ok with a specific value
+   */
+  expectOkValue: <T, E>(result: Result<T, E>, expectedValue: T): void => {
+    const value = ResultTestUtils.expectOk(result)
+    expect(value).toEqual(expectedValue)
+  },
+
+  /**
+   * Assert that a result is Err with a specific error
+   */
+  expectErrValue: <T, E>(result: Result<T, E>, expectedError: E): void => {
+    const error = ResultTestUtils.expectErr(result)
+    expect(error).toEqual(expectedError)
   }
 }
 
@@ -291,7 +306,7 @@ export const PerformanceTestUtils = {
     handlerName: string,
     input: TInput,
     iterations: number = 1
-  ): Promise<{ avgTime: number; minTime: number; maxTime: number }> {
+  ): Promise<{ avgTime: number; maxTime: number; minTime: number }> {
     const times: number[] = []
     
     for (let i = 0; i < iterations; i++) {
@@ -302,14 +317,14 @@ export const PerformanceTestUtils = {
     }
     
     return {
-      avgTime: times.reduce((a, b) => a + b) / times.length,
-      minTime: Math.min(...times),
-      maxTime: Math.max(...times)
+      avgTime: times.reduce((a, b) => a + b, 0) / times.length,
+      maxTime: Math.max(...times),
+      minTime: Math.min(...times)
     }
   },
 
   /**
-   * Assert handler execution time is within limits
+   * Assert handler performance is within expected range
    */
   async expectHandlerPerformance<TInput>(
     harness: ServiceTestHarness<ServiceDefinition<string, Record<string, unknown>>, Record<string, unknown>>,
@@ -323,7 +338,7 @@ export const PerformanceTestUtils = {
 }
 
 /**
- * Common test patterns and fixtures
+ * Test fixtures for common patterns
  */
 export const TestFixtures = {
   /**
@@ -333,567 +348,52 @@ export const TestFixtures = {
     id: 'test-user-1',
     name: 'Test User',
     email: 'test@example.com',
-    createdAt: new Date('2024-01-01'),
-    isActive: true
+    createdAt: new Date('2024-01-01T00:00:00Z'),
+    updatedAt: new Date('2024-01-01T00:00:00Z')
   }),
 
   /**
-   * Standard error responses
+   * Standard order object for testing
+   */
+  order: createTestDataBuilder({
+    id: 'order-123',
+    userId: 'user-123',
+    total: 100.00,
+    status: 'pending' as const,
+    items: [],
+    createdAt: new Date('2024-01-01T00:00:00Z')
+  }),
+
+  /**
+   * Standard error fixtures
    */
   errors: {
-    notFound: (resource: string) => new Error(`${resource} not found`),
+    notFound: (entityType: string) => new Error(`${entityType} not found`),
     validation: (field: string) => new Error(`Validation failed for ${field}`),
     unauthorized: () => new Error('Unauthorized access'),
-    serverError: () => new Error('Internal server error')
+    serverError: (message?: string) => new Error(message || 'Internal server error')
   },
 
   /**
-   * Common mock responses
+   * Standard response fixtures
    */
   responses: {
     success: <T>(data: T) => ok(data),
-    error: <E>(error: E) => err(error),
-    async: <T>(data: T, delay: number = 0) => 
-      new Promise<Result<T, never>>(resolve => 
-        setTimeout(() => resolve(ok(data)), delay)
-      )
-  }
-}
-
-/**
- * Result assertion helpers for neverthrow
- */
-export const ResultTestUtils = {
-  /**
-   * Assert that a result is Ok and return the value
-   */
-  expectOk: <T, E>(result: Result<T, E>): T => {
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      return result.value
-    }
-    throw new Error('Expected Ok result but got Err')
-  },
-
-  /**
-   * Assert that a result is Err and return the error
-   */
-  expectErr: <T, E>(result: Result<T, E>): E => {
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) {
-      return result.error
-    }
-    throw new Error('Expected Err result but got Ok')
-  },
-
-  /**
-   * Assert that a result is Ok with specific value
-   */
-  expectOkValue: <T, E>(result: Result<T, E>, expectedValue: T): void => {
-    const value = ResultTestUtils.expectOk(result)
-    expect(value).toEqual(expectedValue)
-  },
-
-  /**
-   * Assert that a result is Err with specific error
-   */
-  expectErrValue: <T, E>(result: Result<T, E>, expectedError: E): void => {
-    const error = ResultTestUtils.expectErr(result)
-    expect(error).toEqual(expectedError)
-  }
-}
-
-// Re-export vitest utilities for convenience
-export { expect, describe, it, test, beforeEach, afterEach, beforeAll, afterAll, vi }
-
-import { expect, describe, it, test, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
-import { ok, err, type Result } from 'neverthrow'
-import type { ServiceDefinition, HandlerDefinition } from './service'
-import type { MergedContext, HandlerOptions } from './types'
-import type { EnhancedServiceMetadata } from './introspection'
-
-/**
- * Mock dependency builder for creating test dependencies
- */
-export class MockDependencyBuilder<T extends Record<string, unknown>> {
-  private mocks: Partial<T> = {}
-
-  /**
-   * Add a mock for a specific dependency
-   */
-  mock<K extends keyof T>(key: K, mock: T[K]): this {
-    this.mocks[key] = mock
-    return this
-  }
-
-  /**
-   * Add a spy mock that tracks calls
-   */
-  spy<K extends keyof T>(key: K, implementation?: T[K]): this & { getMock: (key: K) => T[K] } {
-    const spy = vi.fn(implementation as unknown)
-    this.mocks[key] = spy as T[K]
-    
-    return Object.assign(this, {
-      getMock: (k: K) => this.mocks[k] as T[K]
-    })
-  }
-
-  /**
-   * Build the complete mock dependencies object
-   */
-  build(): T {
-    return this.mocks as T
-  }
-}
-
-/**
- * Service test harness for comprehensive testing
- */
-export interface ServiceTestHarness<
-  TService extends ServiceDefinition<string, TDeps>,
-  TDeps extends Record<string, unknown>
-> {
-  /** The service instance */
-  service: TService
-  /** Mock dependencies */
-  deps: TDeps
-  /** Mock builder for additional setup */
-  mockBuilder: MockDependencyBuilder<TDeps>
-  /** Execute a handler with mocked context */
-  executeHandler: <TInput, TOutput, TError>(
-    handlerName: string,
-    input: TInput,
-    options?: HandlerOptions
-  ) => Promise<Result<TOutput, TError>>
-  /** Reset all mocks */
-  resetMocks: () => void
-}
-
-/**
- * Create a test harness for a service
- */
-export function createServiceTestHarness<
-  TService extends ServiceDefinition<string, TDeps>,
-  TDeps extends Record<string, unknown>
->(
-  service: TService,
-  dependencies: TDeps
-): ServiceTestHarness<TService, TDeps> {
-  const mockBuilder = new MockDependencyBuilder<TDeps>()
-  
-  // Set up initial mocks
-  Object.entries(dependencies).forEach(([key, value]) => {
-    mockBuilder.mock(key as keyof TDeps, value)
-  })
-
-  const executeHandler = async <TInput, TOutput, TError>(
-    handlerName: string,
-    input: TInput,
-    options?: HandlerOptions
-  ): Promise<Result<TOutput, TError>> => {
-    const handlers = service.getHandlers()
-    const handler = handlers[handlerName]
-    
-    if (!handler) {
-      throw new Error(`Handler '${handlerName}' not found in service '${service.name}'`)
-    }
-
-    // Create merged context for testing
-    const context: MergedContext<TDeps> = {
-      ...dependencies,
-      // Add default handler context
-      traceId: `test-${Date.now()}`,
-      startTime: Date.now(),
-      correlationId: `test-corr-${Math.random()}`
-    } as MergedContext<TDeps>
-
-    return await handler(input, options, context)
-  }
-
-  const resetMocks = () => {
-    Object.values(dependencies).forEach(dep => {
-      if (typeof dep === 'function' && 'mockReset' in dep) {
-        (dep as any).mockReset()
+    error: (error: Error) => err(error),
+    paginated: <T>(items: T[], page: number = 1, pageSize: number = 10) => ok({
+      data: items,
+      pagination: {
+        page,
+        pageSize,
+        total: items.length,
+        totalPages: Math.ceil(items.length / pageSize)
       }
     })
   }
-
-  return {
-    service,
-    deps: dependencies,
-    mockBuilder,
-    executeHandler,
-    resetMocks
-  }
 }
 
-/**
- * Handler test result assertion builder
- */
-export class HandlerTestAssertion<TOutput, TError> {
-  constructor(
-    private readonly resultPromise: Promise<Result<TOutput, TError>>
-  ) {}
+// Need to import expect from vitest for the functions above
+import { expect } from 'vitest'
 
-  /**
-   * Assert that the handler succeeded with specific output
-   */
-  async toReturn(expectedOutput: TOutput): Promise<void> {
-    const result = await this.resultPromise
-    expect(result.isOk()).toBe(true)
-    
-    if (result.isOk()) {
-      expect(result.value).toEqual(expectedOutput)
-    }
-  }
-
-  /**
-   * Assert that the handler succeeded and returned truthy value
-   */
-  async toSucceed(): Promise<TOutput> {
-    const result = await this.resultPromise
-    expect(result.isOk()).toBe(true)
-    
-    if (result.isOk()) {
-      return result.value
-    }
-    throw new Error('Handler did not succeed')
-  }
-
-  /**
-   * Assert that the handler failed with specific error
-   */
-  async toThrow(expectedError: TError | string): Promise<void> {
-    const result = await this.resultPromise
-    expect(result.isErr()).toBe(true)
-    
-    if (result.isErr()) {
-      if (typeof expectedError === 'string') {
-        expect(result.error).toMatch(expectedError)
-      } else {
-        expect(result.error).toEqual(expectedError)
-      }
-    }
-  }
-
-  /**
-   * Assert that the handler failed
-   */
-  async toFail(): Promise<TError> {
-    const result = await this.resultPromise
-    expect(result.isErr()).toBe(true)
-    
-    if (result.isErr()) {
-      return result.error
-    }
-    throw new Error('Handler did not fail')
-  }
-
-  /**
-   * Assert custom conditions on the result
-   */
-  async toSatisfy(predicate: (result: Result<TOutput, TError>) => boolean): Promise<void> {
-    const result = await this.resultPromise
-    expect(predicate(result)).toBe(true)
-  }
-}
-
-/**
- * Expect a handler to succeed
- */
-export function expectHandlerSuccess<TInput, TOutput, TError>(
-  harness: ServiceTestHarness<any, any>,
-  handlerName: string,
-  input: TInput,
-  options?: HandlerOptions
-): HandlerTestAssertion<TOutput, TError> {
-  const resultPromise = harness.executeHandler<TInput, TOutput, TError>(handlerName, input, options)
-  return new HandlerTestAssertion(resultPromise)
-}
-
-/**
- * Expect a handler to fail
- */
-export function expectHandlerError<TInput, TOutput, TError>(
-  harness: ServiceTestHarness<any, any>,
-  handlerName: string,
-  input: TInput,
-  options?: HandlerOptions
-): HandlerTestAssertion<TOutput, TError> {
-  const resultPromise = harness.executeHandler<TInput, TOutput, TError>(handlerName, input, options)
-  return new HandlerTestAssertion(resultPromise)
-}
-
-/**
- * Mock factory utilities
- */
-export const MockFactories = {
-  /**
-   * Create a mock database with common methods
-   */
-  database: () => ({
-    findById: vi.fn(),
-    findMany: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    transaction: vi.fn(),
-    close: vi.fn()
-  }),
-
-  /**
-   * Create a mock logger
-   */
-  logger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn(() => MockFactories.logger())
-  }),
-
-  /**
-   * Create a mock HTTP client
-   */
-  httpClient: () => ({
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-    patch: vi.fn()
-  }),
-
-  /**
-   * Create a mock cache
-   */
-  cache: () => ({
-    get: vi.fn(),
-    set: vi.fn(),
-    delete: vi.fn(),
-    clear: vi.fn(),
-    has: vi.fn()
-  }),
-
-  /**
-   * Create a mock event emitter
-   */
-  eventEmitter: () => ({
-    emit: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    once: vi.fn(),
-    removeAllListeners: vi.fn()
-  })
-}
-
-/**
- * Test data builders for common patterns
- */
-export class TestDataBuilder<T> {
-  private data: Partial<T> = {}
-
-  constructor(private defaults: T) {}
-
-  /**
-   * Set a specific field
-   */
-  with<K extends keyof T>(key: K, value: T[K]): this {
-    this.data[key] = value
-    return this
-  }
-
-  /**
-   * Set multiple fields
-   */
-  withFields(fields: Partial<T>): this {
-    Object.assign(this.data, fields)
-    return this
-  }
-
-  /**
-   * Build the final object
-   */
-  build(): T {
-    return { ...this.defaults, ...this.data }
-  }
-
-  /**
-   * Build multiple objects with different variations
-   */
-  buildMany(count: number, variations?: Array<Partial<T>>): T[] {
-    const results: T[] = []
-    
-    for (let i = 0; i < count; i++) {
-      const variation = variations?.[i] || {}
-      results.push({ ...this.defaults, ...this.data, ...variation })
-    }
-    
-    return results
-  }
-}
-
-/**
- * Create a test data builder
- */
-export function createTestDataBuilder<T>(defaults: T): TestDataBuilder<T> {
-  return new TestDataBuilder(defaults)
-}
-
-/**
- * Service metadata testing utilities
- */
-export const ServiceTestUtils = {
-  /**
-   * Assert that a service has specific handlers
-   */
-  assertHasHandlers(service: ServiceDefinition<string, any>, expectedHandlers: string[]): void {
-    const handlers = service.getHandlers()
-    const handlerNames = Object.keys(handlers)
-    
-    expectedHandlers.forEach(handler => {
-      expect(handlerNames).toContain(handler)
-    })
-  },
-
-  /**
-   * Assert that a service has specific metadata
-   */
-  assertMetadata(
-    metadata: EnhancedServiceMetadata,
-    expected: Partial<EnhancedServiceMetadata>
-  ): void {
-    if (expected.name) expect(metadata.name).toBe(expected.name)
-    if (expected.version) expect(metadata.version).toBe(expected.version)
-    if (expected.tags) expect(metadata.tags).toEqual(expect.arrayContaining(expected.tags))
-    if (expected.dependencyTypes) {
-      expect(metadata.dependencyTypes).toEqual(expect.arrayContaining(expected.dependencyTypes))
-    }
-  },
-
-  /**
-   * Create a test service factory
-   */
-  createTestService: <TDeps extends Record<string, unknown>>(
-    name: string,
-    dependencies: TDeps,
-    handlers: Record<string, HandlerDefinition<any, any, any, TDeps>>
-  ) => {
-    // This would create a minimal service for testing
-    // Implementation would depend on the actual service builder
-    return {
-      name,
-      dependencies,
-      handlers,
-      getMetadata: () => ({ name, handlers: {}, dependencyTypes: [] }),
-      getHandlers: () => handlers
-    }
-  }
-}
-
-/**
- * Performance testing utilities
- */
-export const PerformanceTestUtils = {
-  /**
-   * Measure handler execution time
-   */
-  async measureHandlerTime<TInput, TOutput, TError>(
-    harness: ServiceTestHarness<any, any>,
-    handlerName: string,
-    input: TInput,
-    iterations: number = 1
-  ): Promise<{ avgTime: number; minTime: number; maxTime: number }> {
-    const times: number[] = []
-    
-    for (let i = 0; i < iterations; i++) {
-      const start = performance.now()
-      await harness.executeHandler(handlerName, input)
-      const end = performance.now()
-      times.push(end - start)
-    }
-    
-    return {
-      avgTime: times.reduce((a, b) => a + b) / times.length,
-      minTime: Math.min(...times),
-      maxTime: Math.max(...times)
-    }
-  },
-
-  /**
-   * Assert handler execution time is within limits
-   */
-  async expectHandlerPerformance<TInput>(
-    harness: ServiceTestHarness<any, any>,
-    handlerName: string,
-    input: TInput,
-    maxTimeMs: number
-  ): Promise<void> {
-    const { avgTime } = await this.measureHandlerTime(harness, handlerName, input, 5)
-    expect(avgTime).toBeLessThan(maxTimeMs)
-  }
-}
-
-/**
- * Integration testing utilities
- */
-export const IntegrationTestUtils = {
-  /**
-   * Create a test context with real dependencies
-   */
-  createIntegrationContext: <T extends Record<string, unknown>>(
-    config: T
-  ): T => {
-    // This would set up real dependencies for integration testing
-    return config
-  },
-
-  /**
-   * Clean up integration test resources
-   */
-  cleanup: async (resources: Array<{ close?: () => Promise<void> }>): Promise<void> => {
-    await Promise.all(
-      resources.map(resource => resource.close?.())
-    )
-  }
-}
-
-/**
- * Common test patterns and fixtures
- */
-export const TestFixtures = {
-  /**
-   * Standard user object for testing
-   */
-  user: createTestDataBuilder({
-    id: 'test-user-1',
-    name: 'Test User',
-    email: 'test@example.com',
-    createdAt: new Date('2024-01-01'),
-    isActive: true
-  }),
-
-  /**
-   * Standard error responses
-   */
-  errors: {
-    notFound: (resource: string) => new Error(`${resource} not found`),
-    validation: (field: string) => new Error(`Validation failed for ${field}`),
-    unauthorized: () => new Error('Unauthorized access'),
-    serverError: () => new Error('Internal server error')
-  },
-
-  /**
-   * Common mock responses
-   */
-  responses: {
-    success: <T>(data: T) => ok(data),
-    error: <E>(error: E) => err(error),
-    async: <T>(data: T, delay: number = 0) => 
-      new Promise<Result<T, never>>(resolve => 
-        setTimeout(() => resolve(ok(data)), delay)
-      )
-  }
-}
-
-// Re-export vitest utilities for convenience
+// Re-export vitest utilities for convenience  
 export { expect, describe, it, test, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'

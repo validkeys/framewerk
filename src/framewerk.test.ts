@@ -9,8 +9,10 @@ import { ok, err } from 'neverthrow'
 import { z } from 'zod'
 
 // Import modules to test
-import { defineService, type HandlerDefinition } from './service'
+import { defineService, type HandlerDefinition, type ServiceDefinition } from './service'
 import { ServiceInspector, ServiceRegistry } from './introspection'
+// Note: extractContractTypes function doesn't exist - this will be commented out for now
+// import { extractContractTypes } from './contracts'
 
 // Test schemas
 const UserSchema = z.object({
@@ -40,41 +42,13 @@ interface TestDeps {
 describe('Framewerk Core', () => {
   describe('Service Builder System', () => {
     it('should create a service with handlers', () => {
-      const getUserHandler: HandlerDefinition<
-        { id: string },
-        z.infer<typeof UserSchema>,
-        Error,
-        TestDeps
-      > = async (input, _options, ctx) => {
-        ctx.logger.info(`Getting user ${input.id}`)
-        const user = await ctx.database.findUser(input.id)
-        
-        if (!user) {
-          return err(new Error('User not found'))
-        }
-        
-        return ok(user)
-      }
-
-      const service = defineService("UserService")
+      const service = defineService('UserService')
         .withServiceDependencies<TestDeps>()
         .addHandler('getUser', getUserHandler)
         .build()
 
       expect(service.name).toBe('UserService')
       
-      // Create proper mock dependencies that match TestDeps interface
-      const mockDeps: TestDeps = {
-        database: {
-          findUser: vi.fn(),
-          createUser: vi.fn(),
-          updateUser: vi.fn()
-        },
-        logger: {
-          info: vi.fn(),
-          error: vi.fn()
-        }
-      }
       const serviceInstance = service.make(mockDeps)
       expect(Object.keys(serviceInstance)).toContain('getUser')
     })
@@ -112,10 +86,7 @@ describe('Framewerk Core', () => {
         .addHandler('getUser', getUserHandler)
         .build()
 
-      const serviceInstance = service.make({
-        database: mockDatabase,
-        logger: mockLogger
-      })
+      const handlers = service.getHandlers()
       const context = {
         database: mockDatabase,
         logger: mockLogger,
@@ -124,7 +95,7 @@ describe('Framewerk Core', () => {
         correlationId: 'test-corr'
       }
 
-      const result = await serviceInstance.getUser({ id: '123' }, undefined, context)
+      const result = await handlers.getUser({ id: '123' }, undefined, context)
 
       expect(result.isOk()).toBe(true)
       if (result.isOk()) {
@@ -166,19 +137,8 @@ describe('Framewerk Core', () => {
         .addHandler('createUser', createUserHandler)
         .build()
 
-      const mockDeps: TestDeps = {
-        database: {
-          findUser: vi.fn(),
-          createUser: vi.fn(),
-          updateUser: vi.fn()
-        },
-        logger: {
-          info: vi.fn(),
-          error: vi.fn()
-        }
-      }
-      const serviceInstance = service.make(mockDeps)
-      expect(Object.keys(serviceInstance)).toEqual(['getUser', 'createUser'])
+      const handlers = service.getHandlers()
+      expect(Object.keys(handlers)).toEqual(['getUser', 'createUser'])
     })
   })
 
@@ -330,8 +290,8 @@ describe('Framewerk Core', () => {
   })
 
   describe('Contract System', () => {
+    // TODO: Implement extractContractTypes function
     it.skip('should extract contract types from service definitions', () => {
-      // This feature is not yet implemented
       // Mock a package.json structure
       const mockPackageStructure = {
         'src/services/user/types.ts': `
@@ -367,20 +327,16 @@ describe('Framewerk Core', () => {
         .addHandler('failing', failingHandler)
         .build()
 
-      const mockDeps: TestDeps = {
-        database: { findUser: vi.fn(), createUser: vi.fn(), updateUser: vi.fn() },
-        logger: { info: vi.fn(), error: vi.fn() }
-      }
-      const serviceInstance = service.make(mockDeps)
+      const handlers = service.getHandlers()
       const context = {
-        database: mockDeps.database,
-        logger: mockDeps.logger,
+        database: { findUser: vi.fn(), createUser: vi.fn(), updateUser: vi.fn() },
+        logger: { info: vi.fn(), error: vi.fn() },
         traceId: 'test-trace',
         startTime: Date.now(),
         correlationId: 'test-corr'
       }
 
-      const result = await serviceInstance.failing({ id: '123' }, undefined, context)
+      const result = await handlers.failing({ id: '123' }, undefined, context)
 
       expect(result.isErr()).toBe(true)
       if (result.isErr()) {

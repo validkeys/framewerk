@@ -10,7 +10,7 @@ import { ok, err } from 'neverthrow'
 // Import modules to test
 import { defineService, type HandlerDefinition } from './service'
 import { ServiceInspector } from './introspection'
-import { createServiceTestHarness, MockFactories, TestFixtures, ResultTestUtils } from './testing'
+import { createServiceTestHarness, MockFactories, TestFixtures, ResultTestUtils, PerformanceTestUtils } from './testing'
 
 // Test dependencies interface
 interface UserServiceDeps {
@@ -31,7 +31,7 @@ interface UserServiceDeps {
 }
 
 describe('Testing Utilities Demo', () => {
-  let userService: ReturnType<typeof defineService>
+  let userService: any
   let mockDeps: UserServiceDeps
 
   beforeEach(() => {
@@ -132,9 +132,10 @@ describe('Testing Utilities Demo', () => {
     it('should create a working test harness', async () => {
       const testHarness = createServiceTestHarness(userService, mockDeps)
       
-      expect(testHarness.service.name).toBe('UserService')
-      expect(testHarness.deps).toBe(mockDeps)
-      expect(testHarness.instance).toBeDefined()
+      // The service instance is the handler object, not the service definition
+      expect(testHarness.service).toBeDefined()
+      expect(Object.keys(testHarness.service)).toContain('getUser')
+      expect(testHarness.mockDependencies).toBe(mockDeps)
     })
 
     it('should execute handlers through the test harness', async () => {
@@ -324,27 +325,36 @@ describe('Testing Utilities Demo', () => {
 
   describe('Performance Testing', () => {
     it('should measure handler performance', async () => {
-      const testHarness = createServiceTestHarness(userService, mockDeps)
+      // Create the test harness with type assertion to bypass the strict typing
+      const testHarness = createServiceTestHarness(userService as any, mockDeps as any)
+      
+      // Verify the harness was created correctly
+      expect(testHarness).toBeDefined()
+      expect(testHarness.service).toBeDefined()
       
       // Mock fast response
-      mockDeps.database.findUser.mockResolvedValue({
+      const dbMock = mockDeps.database.findUser as unknown as any
+      const cacheMock = mockDeps.cache.get as unknown as any
+      
+      dbMock.mockResolvedValue({
         id: '123',
         name: 'Fast User',
         email: 'fast@example.com'
       })
-      mockDeps.cache.get.mockResolvedValue(null)
+      cacheMock.mockResolvedValue(null)
 
-      const { avgTime, minTime, maxTime } = await testHarness.callHandler('getUser', { id: '123' })
-        .then(() => performance.now())
-        .then(start => ({ 
-          avgTime: performance.now() - start, 
-          minTime: 0, 
-          maxTime: 0 
-        }))
+      const metrics = await PerformanceTestUtils.measureHandlerTime(
+        testHarness,
+        'getUser',
+        { id: '123' },
+        3
+      )
 
-      // Performance should be reasonable (actual measurement would be more sophisticated)
-      expect(typeof avgTime).toBe('number')
-      expect(avgTime).toBeGreaterThan(0)
+      // Performance should be reasonable
+      expect(typeof metrics.avgTime).toBe('number')
+      expect(metrics.avgTime).toBeGreaterThan(0)
+      expect(metrics.minTime).toBeGreaterThanOrEqual(0)
+      expect(metrics.maxTime).toBeGreaterThanOrEqual(metrics.avgTime)
     })
   })
 })
