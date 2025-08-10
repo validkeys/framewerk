@@ -1,13 +1,13 @@
-import { ok, err, Result } from "@framewerk/contracts/result.js"
-import { UncaughtDefectError } from "@framewerk/contracts/errors.js"
+import {
+  JsonParseError
+} from "@framewerk/contracts/errors.js"
+import { err, ok, Result } from "@framewerk/contracts/result.js"
 
-export const parseJson = <T>(
-  jsonString: string
-): Result<T, UncaughtDefectError> => {
+export const parseJson = <T>(jsonString: string): Result<T, JsonParseError> => {
   try {
     const parsed = JSON.parse(jsonString)
     return ok(parsed as T)
   } catch (e) {
-    return err(new UncaughtDefectError("Failed to parse JSON", e))
+    return err(new JsonParseError("Failed to parse JSON", e))
   }
 }
