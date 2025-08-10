@@ -205,6 +205,8 @@ const handlers = service.getAllHandlers()
 5. **Type Inference**: Must preserve type safety from service definition through usage
 6. **Options Parameter**: New optional parameter for transactions, request context, etc.
 7. **Metadata Preservation**: All information needed for codegen must be preserved
+8. **Functional Programming**: Emphasize smaller functions, functional styles, and composability
+9. **Composability First**: Prefer composable utilities over monolithic solutions
 
 ### Handler Signature Change:
 **Current**: `(input, ctx?) => Promise<Result<Output, Error>>`
