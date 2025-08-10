@@ -20,10 +20,10 @@
         "packages/core-std/*"
       ],
       "@framewerk/accountManager/*": [
-        "packages/feat-accountManager/*"
+        "packages/domain-accountManager/*"
       ],
       "@framewerk/userManager/*": [
-        "packages/feat-userManager/*"
+        "packages/domain-userManager/*"
       ],
       "@framewerk/infra-redis/*": [
         "packages/infra-redis/*"

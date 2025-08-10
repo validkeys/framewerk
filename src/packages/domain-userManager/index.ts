@@ -1,7 +1,7 @@
-import { IRedisService, IUserManagerService } from "../core-contracts/index.ts"
-import { UserEntity } from "../core-contracts/entities.ts"
-import { parseJson } from "../core-std/json.ts"
-import { UncaughtDefectError } from "../core-contracts/errors.ts"
+import { IRedisService, IUserManagerService } from "@framewerk/contracts/index"
+import { UserEntity } from "@framewerk/contracts/entities"
+import { parseJson } from "@framewerk/std/json"
+import { UncaughtDefectError } from "@framewerk/contracts/errors"
 import { err } from "neverthrow"
 
 export interface IUserManagerCtx {

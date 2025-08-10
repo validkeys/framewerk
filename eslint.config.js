@@ -29,11 +29,11 @@ export default [
           },
           {
             target: './packages/infra-*',
-            from: './packages/feat-*',
+            from: './packages/domain-*',
             message: 'Infrastructure cannot depend on features'
           },
           {
-            target: './packages/feat-*',
+            target: './packages/domain-*',
             from: './packages/app-*',
             message: 'Features cannot depend on apps'
           }
@@ -56,11 +56,11 @@ export default [
           },
           {
             target: './packages/infra-*',
-            from: './packages/feat-*',
+            from: './packages/domain-*',
             message: 'Infrastructure cannot depend on features'
           },
           {
-            target: './packages/feat-*',
+            target: './packages/domain-*',
             from: './packages/app-*',
             message: 'Features cannot depend on apps'
           }

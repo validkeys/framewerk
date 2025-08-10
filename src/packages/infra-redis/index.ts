@@ -1,6 +1,6 @@
-import { IRedisService } from "../core-contracts/index.ts";
+import { IRedisService } from "@framewerk/contracts/index";
 import { ok, err } from "neverthrow";
-import { RedisConnectionError } from "../core-contracts/errors.ts";
+import { RedisConnectionError } from "@framewerk/contracts/errors";
 
 export const makeRedisService = (): IRedisService => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

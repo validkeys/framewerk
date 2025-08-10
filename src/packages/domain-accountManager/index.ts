@@ -1,4 +1,4 @@
-import { IAccountManagerService } from "../core-contracts/index.ts"
+import { IAccountManagerService } from "@framewerk/contracts/index";
 import { makeListAccountsHandler } from "./handlers/index.ts"
 import { AccountManagerCtx } from "./types.ts"
 

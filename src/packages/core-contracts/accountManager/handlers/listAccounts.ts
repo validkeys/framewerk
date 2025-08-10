@@ -1,9 +1,11 @@
 import { z } from "zod"
-import { AccountEntitySchema } from "../../entities.ts"
-import type { Result } from "../../result.ts"
-import { RedisConnectionError, UncaughtDefectError } from "../../errors.ts"
+import { AccountEntitySchema } from "@framewerk/contracts/entities"
+import type { Result } from "@framewerk/contracts/result"
+import { RedisConnectionError, UncaughtDefectError } from "@framewerk/contracts/errors"
 
-export const $inputSchema = z.any()
+export const $inputSchema = z.object({
+  accountType: z.string().optional(),
+})
 export const $outputSchema = z.object({
   accounts: z.array(AccountEntitySchema),
 })

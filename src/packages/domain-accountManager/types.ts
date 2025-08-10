@@ -1,7 +1,7 @@
 import {
   IRedisService,
   IUserManagerService
-} from "../core-contracts/index.ts"
+} from "@framewerk/contracts/index"
 
 export interface AccountManagerCtx {
   Redis: IRedisService
