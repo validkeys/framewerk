@@ -97,13 +97,39 @@ import { z } from "zod"
  * - Discriminated union support via `_tag`
  * - Cause chaining for error context
  * - Automatic conversion to handler-compatible format
+ * - OpenAPI/handler metadata for documentation generation
  */
-abstract class AbstractError extends Error {
+export abstract class AbstractError extends Error {
   /** Unique identifier for this error type. Used for exhaustive checking and error discrimination. */
   public abstract readonly _tag: string
 
   /** Optional underlying error that caused this error. Useful for debugging and error chaining. */
   public cause?: unknown
+
+  /** HTTP status code for this error type. Override in subclasses for specific status codes. */
+  static readonly httpStatus: number = 500
+
+  /** The error code/tag for this error type. Must be implemented by subclasses. */
+  static readonly errorCode: string
+
+  /**
+   * Generates a Zod schema for this error type.
+   * Used for OpenAPI documentation and runtime validation.
+   */
+  static getSchema() {
+    const errorCode = (this as typeof AbstractError & { errorCode: string }).errorCode
+    return z.object({
+      code: z.literal(errorCode),
+      message: z.string(),
+    })
+  }
+
+  /**
+   * Gets the HTTP status code for this error type.
+   */
+  static getHttpStatus(): number {
+    return (this as typeof AbstractError & { httpStatus: number }).httpStatus
+  }
 
   /**
    * Converts this error instance to a format compatible with handler error schemas.
@@ -183,6 +209,8 @@ const createHandlerError = <T extends string>(
  */
 export class UserNotFoundError extends AbstractError {
   readonly _tag = "UserNotFoundError" as const
+  static readonly errorCode = "UserNotFoundError"
+  static readonly httpStatus = 404
   static handlerError = createHandlerError("UserNotFoundError", 404)
 
   constructor(message = "User not found", cause?: unknown) {
@@ -207,6 +235,8 @@ export class UserNotFoundError extends AbstractError {
  */
 export class RedisConnectionError extends AbstractError {
   readonly _tag = "RedisConnectionError" as const
+  static readonly errorCode = "RedisConnectionError"
+  static readonly httpStatus = 500
   static handlerError = createHandlerError("RedisConnectionError", 500)
 
   constructor(message = "Redis connection error", cause?: unknown) {
@@ -216,6 +246,8 @@ export class RedisConnectionError extends AbstractError {
 
 export class ValidationError extends AbstractError {
   readonly _tag = "ValidationError" as const
+  static readonly errorCode = "ValidationError"
+  static readonly httpStatus = 400
   static handlerError = createHandlerError("ValidationError", 400)
 
   constructor(message = "Validation error", cause?: unknown) {
@@ -225,6 +257,8 @@ export class ValidationError extends AbstractError {
 
 export class JsonParseError extends AbstractError {
   readonly _tag = "JsonParseError" as const
+  static readonly errorCode = "JsonParseError"
+  static readonly httpStatus = 400
   static handlerError = createHandlerError("JsonParseError", 400)
   constructor(message = "Failed to parse JSON", cause?: unknown) {
     super(message, cause)
@@ -233,6 +267,8 @@ export class JsonParseError extends AbstractError {
 
 export class UncaughtDefectError extends AbstractError {
   readonly _tag = "UncaughtDefectError" as const
+  static readonly errorCode = "UncaughtDefectError"
+  static readonly httpStatus = 500
   static handlerError = createHandlerError("UncaughtDefectError", 500)
 
   constructor(message = "Uncaught defect error", cause?: unknown) {

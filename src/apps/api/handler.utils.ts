@@ -1,7 +1,5 @@
-import {
-  HandlerContext
-} from "@framewerk/std/handler.js"
 import { FastifyRequest } from "fastify"
+import { HandlerContext } from "@framewerk/core"
 
 
 // example utility to generate a HandlerContext from a Fastify request

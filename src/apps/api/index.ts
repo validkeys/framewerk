@@ -1,6 +1,6 @@
-import { makeUserManagerService } from "@framewerk/userManager/index";
-import { makeAccountManagerService } from "@framewerk/accountManager/index";
-import { makeRedisService } from "@framewerk/infra-redis/index";
+import { makeUserManagerService } from "@framewerk/userManager/index"
+import { makeAccountManagerService } from "@framewerk/accountManager/index"
+import { makeRedisService } from "@framewerk/infra-redis/index"
 
 const startServer = async () => {
   const redis = makeRedisService()
@@ -21,9 +21,14 @@ const startServer = async () => {
     UserManager: userManager,
   })
 
-  const result = await accountManager.listAccounts({
-    foo: "bar",
-  })
+  const result = await accountManager.listAccounts(
+    {
+      accountType: "RRIF",
+    },
+    {
+      foo: "bar",
+    }
+  )
 
   if (result.isErr()) {
     console.error("Error listing accounts:", result.error)

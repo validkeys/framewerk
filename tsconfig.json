@@ -13,6 +13,9 @@
     "rewriteRelativeImportExtensions": true,
     "baseUrl": "src",
     "paths": {
+      "@framewerk/core": [
+        "packages/core-framewerk/index.ts"
+      ],
       "@framewerk/contracts/*": [
         "packages/core-contracts/*"
       ],

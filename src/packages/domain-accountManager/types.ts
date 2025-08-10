@@ -3,7 +3,7 @@ import {
   IUserManagerService
 } from "@framewerk/contracts/index"
 
-export interface AccountManagerCtx {
+export interface AccountManagerDeps {
   Redis: IRedisService
   UserManager: IUserManagerService
 }

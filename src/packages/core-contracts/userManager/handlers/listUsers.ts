@@ -1,10 +1,12 @@
-import { z } from "zod"
 import { UserEntitySchema } from "@framewerk/contracts/entities"
 import type { Result } from "@framewerk/contracts/result"
 import {
+  HandlerMethod,
+  JsonParseError,
   RedisConnectionError,
   UncaughtDefectError,
-} from "@framewerk/contracts/errors"
+} from "@framewerk/core"
+import { z } from "zod"
 
 export const $inputSchema = z.object({
   email: z.string().optional(),
@@ -19,3 +21,9 @@ export type Output = z.infer<typeof $outputSchema>
 export type Type = (
   input: Input
 ) => Promise<Result<Output, RedisConnectionError | UncaughtDefectError>>
+
+export type Handler = HandlerMethod<
+  Input,
+  Output,
+  RedisConnectionError | UncaughtDefectError | JsonParseError
+>
