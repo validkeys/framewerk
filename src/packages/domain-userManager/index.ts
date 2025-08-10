@@ -4,14 +4,14 @@ import {
 } from "@framewerk/contracts/index"
 import { makeListAccountsHandler } from "./handlers/listUsers.ts"
 
-export interface IUserManagerCtx {
+export interface UserManagerDeps {
   Redis: IRedisService
 }
 
 export const makeUserManagerService = (
-  ctx: IUserManagerCtx
+  deps: UserManagerDeps
 ): IUserManagerService => {
   return {
-    listUsers: makeListAccountsHandler(ctx),
+    listUsers: makeListAccountsHandler(deps),
   }
 }

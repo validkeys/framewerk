@@ -8,13 +8,13 @@ import {
 } from "../../core-framewerk/errors.ts"
 import { ListUsersMethod } from "../../core-contracts/userManager/index.ts"
 import { parseJson } from "../../core-std/json.ts"
-import { IUserManagerCtx } from "../index.ts"
+import { UserManagerDeps } from "../index.ts"
 
 export const listUsersHandler = defineHandler("user", "List users")
   .errors([RedisConnectionError, JsonParseError, UncaughtDefectError] as const)
   .input(ListUsersMethod.$inputSchema)
   .output(ListUsersMethod.$outputSchema)
-  .withDependencies<IUserManagerCtx>()
+  .withDependencies<UserManagerDeps>()
   .resolver((deps) => async (input, ctx) => {
     console.log("[INFO] Listing users input", input)
     console.log("[INFO] List Users Context:", ctx)
@@ -37,7 +37,7 @@ export const listUsersHandler = defineHandler("user", "List users")
   .build()
 
 export const makeListAccountsHandler = (
-  deps: IUserManagerCtx
+  deps: UserManagerDeps
 ): ListUsersMethod.Handler => {
   return listUsersHandler(deps).method
 }
