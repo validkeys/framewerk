@@ -1,20 +1,20 @@
 /**
- * @framewerk/framewerk - Main Package Exports
+ * @validkeys/framewerk - Main Package Exports
  * 
  * A complete service/action architecture toolkit with type-safe builders and codegen support
  */
 
-// Handler system exports
+// Core system exports
 export * from "./handler.ts"
-
-// Service system exports  
 export * from "./service.ts"
+export * from "./types.ts"
+export * from "./errors.ts"
 
-// Contract system exports
+// Contract system exports (for monorepo usage)
 export * from "./contracts.ts"
 
-// Type system exports
-export * from "./types.ts"
+// Introspection & metadata system exports
+export * from "./introspection.ts"
 
-// Error system exports
-export * from "./errors.ts"
+// Testing utilities exports
+export * from "./testing.ts"
