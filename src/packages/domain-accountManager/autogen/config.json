@@ -1,0 +1,20 @@
+{
+  "package": {
+    "name": "accountManager",
+    "serviceFactory": "makeAccountManagerService", 
+    "dependenciesType": "AccountManagerDeps",
+    "servicePath": "../src/index.js"
+  },
+  "routes": {
+    "prefix": "/accounts",
+    "defaultMethod": "POST",
+    "requireAuth": true,
+    "methodOverrides": {
+      "accounts.list": "GET"
+    }
+  },
+  "fastify": {
+    "useZodOpenApi": true,
+    "outputFile": "fastify-routes.ts"
+  }
+}

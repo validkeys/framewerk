@@ -10,7 +10,7 @@ import { ListUsersMethod } from "../../core-contracts/userManager/index.ts"
 import { parseJson } from "../../core-std/json.ts"
 import { UserManagerDeps } from "../index.ts"
 
-export const listUsersHandler = defineHandler("user", "List users")
+export const handler = defineHandler("user", "List users")
   .errors([RedisConnectionError, JsonParseError, UncaughtDefectError] as const)
   .input(ListUsersMethod.$inputSchema)
   .output(ListUsersMethod.$outputSchema)
@@ -39,5 +39,5 @@ export const listUsersHandler = defineHandler("user", "List users")
 export const makeListAccountsHandler = (
   deps: UserManagerDeps
 ): ListUsersMethod.Handler => {
-  return listUsersHandler(deps).method
+  return handler(deps).method
 }

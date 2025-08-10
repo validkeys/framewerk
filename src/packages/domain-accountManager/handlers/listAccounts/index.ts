@@ -11,7 +11,7 @@ import {
 } from "@framewerk/core" // ✅ Fixed import path
 import { defineHandler } from "@framewerk/core" // ✅ Fixed import path
 
-const handler = defineHandler("accounts.list", "List accounts")
+export const handler = defineHandler("accounts.list", "List accounts")
   .input(ListAccountsMethod.$inputSchema.strict())
   .output(ListAccountsMethod.$outputSchema)
   .errors([RedisConnectionError, JsonParseError, UncaughtDefectError] as const)

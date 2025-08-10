@@ -1,0 +1,37 @@
+{
+  "global": {
+    "routePrefix": "/api/v1",
+    "defaultMethod": "POST", 
+    "requireAuth": false
+  },
+  "domains": {
+    "accountManager": {
+      "serviceFactory": "makeAccountManagerService",
+      "dependenciesType": "AccountManagerDependencies",
+      "servicePath": "../packages/domain-accountManager/index.js",
+      "routePrefix": "/accounts",
+      "requireAuth": true,
+      "methodOverrides": {
+        "accounts.list": "GET"
+      }
+    },
+    "userManager": {
+      "serviceFactory": "makeUserManagerService", 
+      "dependenciesType": "UserManagerDependencies",
+      "servicePath": "../packages/domain-userManager/index.js",
+      "routePrefix": "/users",
+      "requireAuth": true,
+      "methodOverrides": {
+        "user": "GET"
+      }
+    }
+  },
+  "fastify": {
+    "useZodOpenApi": true,
+    "openapi": {
+      "version": "1.0.0",
+      "title": "Framewerk API",
+      "description": "Auto-generated API from handler definitions"
+    }
+  }
+}
