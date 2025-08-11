@@ -1,21 +1,62 @@
 {
-  "name": "framewerk",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "@framewerk/core",
+  "version": "1.1.0",
+  "description": "A complete service/action architecture toolkit with type-safe builders and codegen support",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "start": "tsx src/apps/api/index.ts",
-    "typecheck": "npx tsc --noEmit",
+    "build": "tsc --project tsconfig.build.json",
+    "build:clean": "rm -rf dist && pnpm build",
+    "dev": "tsx src/apps/api/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "pnpm build && pnpm changeset publish",
+    "release": "pnpm build && pnpm changeset:publish",
+    "prepublishOnly": "pnpm test && pnpm build",
     "autogen:fastify": "tsx src/autogen/cli.ts --generator fastify-routes --search-path ./src --output-dir ./generated/routes"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "typescript",
+    "service-architecture",
+    "dependency-injection",
+    "api-framework",
+    "type-safety",
+    "monorepo",
+    "contracts",
+    "testing-utilities"
+  ],
+  "author": "Kyle Davis",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/framewerk.git"
+  },
+  "homepage": "https://github.com/yourusername/framewerk#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/framewerk/issues"
+  },
   "packageManager": "pnpm@9.15.5+sha512.845196026aab1cc3f098a0474b64dfbab2afe7a1b4e91dd86895d8e4aa32a7a6d03049e2d0ad770bbe4de023a7122fb68c1a1d6e0d033c7076085f9d5d4800d4",
   "devDependencies": {
+    "@changesets/cli": "^2.29.5",
     "@swc/core": "^1.13.3",
     "@swc/types": "^0.1.24",
     "@types/node": "^24.2.1",

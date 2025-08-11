@@ -1,4 +1,394 @@
-# @validkeys/framewerk
+# @framewerk/core
+
+A complete service/action architecture toolkit with type-safe builders and codegen support for TypeScript applications.
+
+## Features
+
+- 🎯 **Type-Safe Service Architecture** - Define services with full TypeScript type safety
+- 🔧 **Dependency Injection** - Built-in DI system with type-safe dependencies
+- 📝 **Contract System** - Extract and share API contracts between packages
+- 🧪 **Testing Utilities** - Comprehensive testing tools with mocks and fixtures
+- 🔍 **Introspection** - Runtime metadata and OpenAPI generation
+- 📦 **Monorepo Ready** - Designed for scalable monorepo architectures
+
+## Installation
+
+```bash
+npm install @framewerk/core neverthrow
+# or
+pnpm add @framewerk/core neverthrow
+# or
+yarn add @framewerk/core neverthrow
+```
+
+## Quick Start
+
+### 1. Define Your Service Dependencies
+
+```typescript
+interface UserServiceDeps {
+  database: {
+    findUser: (id: string) => Promise<User | null>
+    createUser: (data: CreateUserData) => Promise<User>
+  }
+  logger: {
+    info: (message: string) => void
+    error: (message: string, error?: Error) => void
+  }
+}
+```
+
+### 2. Create Handler Definitions
+
+```typescript
+import { defineService, type HandlerDefinition } from '@framewerk/core'
+import { ok, err } from 'neverthrow'
+
+const getUserHandler: HandlerDefinition<
+  { id: string },
+  User,
+  Error,
+  UserServiceDeps
+> = async (input, options, ctx) => {
+  const user = await ctx.database.findUser(input.id)
+  if (!user) {
+    return err(new Error('User not found'))
+  }
+  return ok(user)
+}
+```
+
+### 3. Build Your Service
+
+```typescript
+const userService = defineService("UserService")
+  .withServiceDependencies<UserServiceDeps>()
+  .addHandler('getUser', getUserHandler)
+  .addHandler('createUser', createUserHandler)
+  .build()
+```
+
+### 4. Use Your Service
+
+```typescript
+const dependencies: UserServiceDeps = {
+  database: new DatabaseService(),
+  logger: new Logger()
+}
+
+const service = userService.make(dependencies)
+const result = await service.getUser({ id: '123' })
+
+if (result.isOk()) {
+  console.log('User:', result.value)
+} else {
+  console.error('Error:', result.error)
+}
+```
+
+## Testing
+
+Framewerk provides comprehensive testing utilities:
+
+```typescript
+import { createServiceTestHarness, MockFactories } from '@framewerk/core'
+
+const mockDeps = {
+  database: {
+    findUser: vi.fn(),
+    createUser: vi.fn()
+  },
+  logger: MockFactories.logger()
+}
+
+const testHarness = createServiceTestHarness(userService, mockDeps)
+
+// Test your handlers
+const result = await testHarness.callHandler('getUser', { id: '123' })
+testHarness.assertMockCalled('database.findUser', 1)
+```
+
+## Contract System
+
+Extract type-safe contracts for API sharing:
+
+```typescript
+import { ServiceHandlerContracts, createServiceContracts } from '@framewerk/core'
+
+// Extract contract types
+type UserServiceContract = ServiceHandlerContracts<typeof userService>
+
+// Create runtime contracts for sharing
+const contracts = createServiceContracts(userService)
+```
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm 9+
+
+### Setup
+
+```bash
+git clone <repository-url>
+cd framewerk
+pnpm install
+```
+
+### Available Scripts
+
+- `pnpm build` - Build the package for distribution
+- `pnpm build:clean` - Clean build directory and rebuild
+- `pnpm test` - Run all tests
+- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test:coverage` - Run tests with coverage report
+- `pnpm typecheck` - Type-check without emitting files
+- `pnpm lint` - Run ESLint
+- `pnpm lint:fix` - Run ESLint with auto-fix
+
+## Version Management & Publishing
+
+This project uses [Changesets](https://github.com/changesets/changesets) for automated version management and publishing to npm.
+
+### 📦 Publishing Scripts
+
+All publishing-related scripts are configured to use `pnpm` consistently:
+
+```bash
+# Development & Build
+pnpm build                # Compile TypeScript to dist/
+pnpm build:clean          # Clean dist/ and rebuild
+pnpm test                 # Run all tests
+pnpm typecheck            # Type-check without emitting
+
+# Changeset Workflow  
+pnpm changeset            # Create a new changeset
+pnpm changeset:version    # Update versions and generate CHANGELOG
+pnpm changeset:publish    # Build and publish to npm
+
+# Combined Release
+pnpm release              # Clean, build, and publish in one command
+```
+
+### 🚀 Publishing Workflow
+
+#### Step 1: Create a Changeset
+
+When you make changes that should be released, document them with a changeset:
+
+```bash
+pnpm changeset
+```
+
+**Interactive prompts:**
+1. **Select packages:** Choose `@framewerk/core` (or all packages in monorepo)
+2. **Change type:** 
+   - `major` - Breaking changes that require user migration
+   - `minor` - New features that are backwards compatible
+   - `patch` - Bug fixes and small improvements
+3. **Description:** Write a clear summary of the changes
+
+This creates a markdown file in `.changeset/` that will be used to generate the changelog.
+
+#### Step 2: Commit the Changeset
+
+Commit both your code changes and the changeset file:
+
+```bash
+git add .
+git commit -m "feat: add new service introspection features"
+git push
+```
+
+#### Step 3: Version and Publish
+
+When ready to release (typically after merging to main):
+
+```bash
+# Option 1: Step-by-step
+pnpm changeset:version    # Updates package.json version + generates CHANGELOG.md
+pnpm changeset:publish    # Builds and publishes to npm
+
+# Option 2: All-in-one  
+pnpm release             # Combines clean + build + publish
+```
+
+### 📝 Changeset Examples
+
+#### Example: Feature Addition
+```markdown
+---
+"@framewerk/core": minor
+---
+
+Add comprehensive testing utilities
+
+- Added MockFactories for common service dependencies
+- Enhanced ServiceTestHarness with assertion helpers  
+- Improved type safety for test dependency injection
+- Added PerformanceTestUtils for handler benchmarking
+```
+
+#### Example: Breaking Change
+```markdown
+---
+"@framewerk/core": major
+---
+
+Refactor service definition API for better type safety
+
+BREAKING CHANGES:
+- `defineService().withDeps()` renamed to `withServiceDependencies()`
+- Handler context now automatically merges service dependencies
+- Removed deprecated `ServiceBuilder.create()` method
+
+Migration guide: See docs/migration-v2.md
+```
+
+#### Example: Bug Fix
+```markdown
+---
+"@framewerk/core": patch
+---
+
+Fix memory leak in service registry
+
+- Fixed WeakMap usage in service registration
+- Improved cleanup of handler metadata
+- Added tests for garbage collection scenarios
+```
+
+### ✅ Pre-Publish Checklist
+
+Before publishing, ensure:
+
+1. **Tests Pass**: `pnpm test` - All test suites pass
+2. **Type Safety**: `pnpm typecheck` - No TypeScript errors  
+3. **Build Success**: `pnpm build` - Clean compilation to dist/
+4. **Linting**: `pnpm lint` - Code style compliance
+5. **npm Login**: `npm whoami` - Verify you're logged into npm
+6. **Permissions**: Ensure you have publish rights to `@framewerk` scope
+
+The `prepublishOnly` script automatically runs `build:clean && build` before publishing.
+
+### 🔄 Automated Releases with CI/CD
+
+For production repositories, automate releases with GitHub Actions:
+
+```yaml
+# .github/workflows/release.yml
+name: Release & Publish
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    name: Release to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Create Release PR or Publish
+        uses: changesets/action@v1
+        with:
+          publish: pnpm changeset:publish
+          title: "chore: release package"
+          commit: "chore: release package"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+```
+
+### 🎯 Best Practices
+
+#### Changeset Guidelines
+- **One changeset per feature/fix** - Don't bundle unrelated changes
+- **Clear descriptions** - Help users understand the impact
+- **Proper semver** - Be conservative with breaking changes
+- **Link to issues** - Reference GitHub issues when applicable
+
+#### Version Strategy
+- **Patch (0.0.X)** - Bug fixes, documentation updates, minor improvements
+- **Minor (0.X.0)** - New features, API additions, performance improvements  
+- **Major (X.0.0)** - Breaking changes, API removals, architecture changes
+
+#### Release Timing
+- **Regular cadence** - Weekly or bi-weekly minor releases
+- **Emergency patches** - Immediate fixes for critical bugs
+- **Major versions** - Plan ahead, provide migration guides
+
+### 🔍 Verifying Releases
+
+After publishing, verify the release:
+
+```bash
+# Check npm registry
+npm view @framewerk/core
+
+# Install in test project
+npm install @framewerk/core@latest
+
+# Verify package contents
+npm pack @framewerk/core --dry-run
+```
+
+The package should include:
+- ✅ `dist/` directory with compiled JS and `.d.ts` files
+- ✅ `README.md` with complete documentation
+- ✅ `CHANGELOG.md` with version history
+- ✅ `package.json` with correct version and exports
+
+## Advanced Features
+
+For detailed documentation on advanced features including:
+
+- Service composition and dependency injection patterns
+- Contract system for monorepo architectures  
+- Introspection and OpenAPI generation
+- Performance testing utilities
+- Code generation integration
+
+Please see the [full documentation](./docs/README.md) (coming soon).
+
+## License
+
+MIT
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Add a changeset: `pnpm changeset`
+5. Submit a pull request
+
+Please ensure all tests pass and include appropriate changesets for your changes.
 
 A complete TypeScript toolkit for building type-safe service/action architectures with comprehensive testing utilities, introspection capabilities, and code generation support.
 

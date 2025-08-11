@@ -8,34 +8,15 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "outDir": "dist",
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "baseUrl": "src",
-    "paths": {
-      "@framewerk/core": [
-        "packages/core-framewerk/index.ts"
-      ],
-      "@framewerk/contracts/*": [
-        "packages/core-contracts/*"
-      ],
-      "@framewerk/std/*": [
-        "packages/core-std/*"
-      ],
-      "@framewerk/accountManager/*": [
-        "packages/domain-accountManager/*"
-      ],
-      "@framewerk/userManager/*": [
-        "packages/domain-userManager/*"
-      ],
-      "@framewerk/infra-redis/*": [
-        "packages/infra-redis/*"
-      ],
-    }
+    "noEmit": true
   },
   "include": [
     "src/**/*",
-    "./generated/**/*.",
     "vitest.config.ts"
+  ],
+  "references": [
+    { "path": "./tsconfig.build.json" }
   ]
 }
