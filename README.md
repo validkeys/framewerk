@@ -10,6 +10,29 @@ A complete service/action architecture toolkit with type-safe builders and codeg
 - 🧪 **Testing Utilities** - Comprehensive testing tools with mocks and fixtures
 - 🔍 **Introspection** - Runtime metadata and OpenAPI generation
 - 📦 **Monorepo Ready** - Designed for scalable monorepo architectures
+- ✨ **Effect-TS Inspired Errors** - Tagged error system with exhaustive type checking
+- 🚀 **Zero Type Visibility Issues** - Export handlers without TypeScript compilation errors
+
+## TypeScript Integration
+
+Framewerk is designed for seamless TypeScript integration:
+
+```typescript
+// ✅ Export handlers without "cannot be named" errors
+export const getUserHandler = defineHandler("getUser", "Get user by ID")
+  .input(z.object({ userId: z.string() }))
+  .output(z.object({ id: z.string(), name: z.string() }))
+  .errors([UserNotFoundError] as const)
+  .withDependencies<Dependencies>()
+  .resolver((deps) => async (input) => {
+    // Resolvers return error instances for type safety
+    return err(new UserNotFoundError(input.userId))
+  })
+  .build()
+
+// ✅ No TypeScript visibility issues in consuming applications
+export { getUserHandler }
+```
 
 ## Installation
 
@@ -883,21 +906,19 @@ type GetUserOutput = Awaited<ReturnType<UserHandlers['getUser']>>
 Comprehensive error handling utilities:
 
 ```typescript
-import { AbstractError, ErrorCode } from '@validkeys/framewerk'
+import { FramewerkError } from '@validkeys/framewerk'
 
 // Create custom error classes
-class UserNotFoundError extends AbstractError {
+class UserNotFoundError extends FramewerkError.tagged("UserNotFoundError") {
+  static readonly httpStatus = 404
+  
   constructor(userId: string) {
-    super({
-      code: ErrorCode.NOT_FOUND,
-      message: `User not found: ${userId}`,
-      details: { userId }
-    })
+    super(`User not found: ${userId}`)
   }
 }
 
 // Use in handlers
-return err(new UserNotFoundError(input.id))
+return err(new UserNotFoundError(input.id).toHandlerError())
 ```
 
 ## Introspection & Metadata
@@ -1019,25 +1040,23 @@ const result = await getUserResult
 Create domain-specific error types:
 
 ```typescript
-import { AbstractError, ErrorCode } from '@validkeys/framewerk'
+import { FramewerkError } from '@validkeys/framewerk'
 
-class ValidationError extends AbstractError {
+class ValidationError extends FramewerkError.tagged("ValidationError") {
+  static readonly httpStatus = 400
+  
   constructor(field: string, value: unknown) {
-    super({
-      code: ErrorCode.VALIDATION_ERROR,
-      message: `Validation failed for field: ${field}`,
-      details: { field, value }
-    })
+    super(`Validation failed for field: ${field}`)
+    // Store additional context as properties if needed
+    this.cause = { field, value }
   }
 }
 
-class DatabaseError extends AbstractError {
+class DatabaseError extends FramewerkError.tagged("DatabaseError") {
+  static readonly httpStatus = 500
+  
   constructor(operation: string, cause: Error) {
-    super({
-      code: ErrorCode.INTERNAL_ERROR,
-      message: `Database operation failed: ${operation}`,
-      cause
-    })
+    super(`Database operation failed: ${operation}`, cause)
   }
 }
 ```
@@ -1045,12 +1064,17 @@ class DatabaseError extends AbstractError {
 ### Error Handling Patterns
 
 ```typescript
+// ✅ Handler builders - return error instances for type safety
 const processOrderHandler = defineHandler("processOrder", "Process order")
-  .handler(async (input, options, ctx) => {
+  .input(z.object({ orderId: z.string() }))
+  .output(z.object({ success: z.boolean() }))
+  .errors([ValidationError, DatabaseError, OrderProcessingError] as const)
+  .withDependencies<OrderDependencies>()
+  .resolver((deps) => async (input) => {
     // Validate input
     const validation = validateOrderInput(input)
     if (validation.isErr()) {
-      return err(validation.error)
+      return err(new ValidationError("Invalid order data")) // ✅ Return error instance
     }
     
     // Chain database operations
@@ -1059,6 +1083,24 @@ const processOrderHandler = defineHandler("processOrder", "Process order")
       .andThen(payment => ctx.fulfillmentService.scheduleShipment(payment))
       .mapErr(error => new OrderProcessingError("Failed to process order", error))
   })
+  .build()
+
+// ✅ No TypeScript "cannot be named" errors when exporting
+export { processOrderHandler }
+
+// ✅ Service handlers - same pattern
+const serviceOrderHandler: HandlerDefinition<
+  OrderInput,
+  OrderOutput,
+  ValidationError | DatabaseError,
+  OrderDependencies
+> = async (input, options, ctx) => {
+  const order = await ctx.database.findOrder(input.orderId)
+  if (!order) {
+    return err(new ValidationError("Order not found")) // ✅ Return error instance
+  }
+  return ok(order)
+}
 ```
 
 ## Advanced Patterns
@@ -1343,13 +1385,13 @@ export const processOrderHandler = defineHandler("processOrder", "Process custom
     // Validate user
     const userResult = await ctx.database.getUser(userId)
     if (!userResult) {
-      return err(new UserNotFoundError(userId))
+      return err(new UserNotFoundError(userId).toHandlerError())
     }
     
     // Check inventory
     const availability = await ctx.inventoryService.checkAvailability(items)
     if (!availability.allAvailable) {
-      return err(new InventoryError("Some items are not available"))
+      return err(new InventoryError("Some items are not available").toHandlerError())
     }
     
     // Calculate totals
@@ -1368,7 +1410,7 @@ export const processOrderHandler = defineHandler("processOrder", "Process custom
     })
     
     if (paymentResult.status !== 'approved') {
-      return err(new PaymentError("Payment was declined"))
+      return err(new PaymentError("Payment was declined").toHandlerError())
     }
     
     // Reserve inventory

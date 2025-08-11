@@ -7,29 +7,49 @@
  *
  * ## Key Features
  *
- * ### 1. Structured Error Classes
- * All errors extend `AbstractError` and include:
- * - `_tag`: Unique identifier for the error type (used for exhaustive checking)
- * - `message`: Human-readable error description
- * - `cause`: Optional underlying error that caused this error
+ * ### 1. Effect-TS Inspired Tagged Errors
+ * All errors implement the `TaggedError` interface with:
+ * - `_tag`: Unique literal type identifier for exhaustive checking
+ * - Type-safe error discrimination via discriminated unions
+ * - Automatic type inference for error tags
  *
- * ### 2. Handler Integration
+ * ### 2. Multiple Creation Patterns
+ * Choose the pattern that fits your needs:
+ * - `FramewerkError.tagged("ErrorName")`: Class extension with factory
+ * - `TaggedError("ErrorName")`: Direct factory function
+ * - Legacy `AbstractError`: Backward compatibility (deprecated)
+ *
+ * ### 3. Handler Integration
  * Each error class provides:
  * - `static handlerError()`: Generates Zod schema and metadata for HTTP handlers
  * - `toHandlerError()`: Converts error instances to handler-compatible format
  *
- * ### 3. Type Safety
+ * ### 4. Type Safety & Exhaustive Checking
  * - Exhaustive error checking via discriminated unions on `_tag`
  * - Automatic TypeScript inference of error types in handlers
  * - Compile-time validation that all error cases are handled
  *
  * ## Usage Examples
  *
+ * ### Creating Tagged Errors (Recommended)
+ * ```typescript
+ * // Pattern 1: Class extension with tagged factory
+ * class UserNotFoundError extends FramewerkError.tagged("UserNotFoundError") {
+ *   static readonly httpStatus = 404
+ *   constructor(userId?: string) {
+ *     super(userId ? `User ${userId} not found` : "User not found")
+ *   }
+ * }
+ *
+ * // Pattern 2: Direct factory function
+ * export const NetworkError = TaggedError("NetworkError")
+ * ```
+ *
  * ### Defining Handler Errors
  * ```typescript
  * const handler = defineHandler("operation", "Description")
  *   .errors([
- *     RedisConnectionError.handlerError(),
+ *     UserNotFoundError.handlerError(),
  *     ValidationError.handlerError(422), // Custom status code
  *   ] as const)
  *   .resolver(async () => {
@@ -46,17 +66,21 @@
  * }
  *
  * // Or create new error
- * return err(new ValidationError("Invalid input").toHandlerError())
+ * return err(new UserNotFoundError("user-123").toHandlerError())
  * ```
  *
- * ### Error Mapping with Exhaustive Checking
+ * ### Exhaustive Error Handling
  * ```typescript
- * const mapError = (error: RedisConnectionError | ValidationError) => {
+ * type HandlerErrors = UserNotFoundError | ValidationError | DatabaseError
+ *
+ * const mapError = (error: HandlerErrors) => {
  *   switch (error._tag) {
- *     case "RedisConnectionError":
- *       return { code: error._tag, message: "Database unavailable" }
+ *     case "UserNotFoundError":
+ *       return { code: error._tag, message: "User not found" }
  *     case "ValidationError":
  *       return { code: error._tag, message: "Invalid request" }
+ *     case "DatabaseError":
+ *       return { code: error._tag, message: "Server error" }
  *     default:
  *       const _exhaustive: never = error // TypeScript will error if cases are missing
  *       throw new Error(`Unhandled error: ${_exhaustive}`)
@@ -64,87 +88,114 @@
  * }
  * ```
  *
- * ## How `toHandlerError()` Works
+ * ## Migration from AbstractError
  *
- * The `toHandlerError()` method bridges the gap between internal error representations
- * and the handler system's requirements:
- *
- * 1. **Type Preservation**: Uses `this._tag as this['_tag']` to preserve literal types
- * 2. **Schema Compliance**: Returns objects that match the Zod schemas defined in `handlerError()`
- * 3. **Automatic Conversion**: Eliminates manual property mapping in handler resolvers
- *
+ * ### Before (AbstractError - Deprecated)
  * ```typescript
- * // Internal error instance:
- * const error = new RedisConnectionError("Connection failed")
- *
- * // Handler-compatible format:
- * error.toHandlerError() // { code: "RedisConnectionError", message: "Connection failed" }
+ * class UserNotFoundError extends AbstractError {
+ *   readonly _tag = "UserNotFoundError" as const
+ *   static readonly errorCode = "UserNotFoundError"
+ *   static readonly httpStatus = 404
+ *   static handlerError = createHandlerError("UserNotFoundError", 404)
+ * }
  * ```
  *
- * This ensures that:
- * - Error instances can be used internally with full error context
- * - Handler responses get clean, consistent error objects
- * - Type safety is maintained throughout the conversion
+ * ### After (FramewerkError.tagged - Recommended)
+ * ```typescript
+ * class UserNotFoundError extends FramewerkError.tagged("UserNotFoundError") {
+ *   static readonly httpStatus = 404
+ *   constructor(userId?: string) {
+ *     super(userId ? `User ${userId} not found` : "User not found")
+ *   }
+ * }
+ * ```
+ *
+ * ## Benefits of the New System
+ *
+ * 1. **Less Boilerplate**: No need to manually define `_tag`, `errorCode`, or `handlerError`
+ * 2. **Better Type Safety**: Automatic literal type inference for `_tag`
+ * 3. **Effect-TS Compatibility**: Similar patterns to Effect-TS error handling
+ * 4. **Exhaustive Checking**: TypeScript ensures all error cases are handled
+ * 5. **Consistent API**: Both creation patterns provide the same interface
  */
 
-// Error types
 import { z } from "zod"
 
 /**
- * Base class for all application errors.
- *
- * Provides a consistent interface for error handling with:
- * - Discriminated union support via `_tag`
- * - Cause chaining for error context
- * - Automatic conversion to handler-compatible format
- * - OpenAPI/handler metadata for documentation generation
+ * Tagged error interface inspired by Effect-TS for type-safe error handling.
+ * 
+ * This interface ensures all errors have a `_tag` property that can be used
+ * for exhaustive error checking and discriminated unions.
  */
-export abstract class AbstractError extends Error {
-  /** Unique identifier for this error type. Used for exhaustive checking and error discrimination. */
+export interface TaggedError {
+  readonly _tag: string
+}
+
+/**
+ * Base class for all framewerk errors using the TaggedError pattern.
+ * 
+ * Inspired by Effect-TS, this provides:
+ * - Automatic `_tag` inference from the class name
+ * - Type-safe error discrimination
+ * - Exhaustive error handling support
+ * - Handler integration with automatic schema generation
+ */
+export abstract class FramewerkError extends Error implements TaggedError {
+  /** 
+   * Unique identifier for this error type. 
+   * Automatically inferred from the class name for type safety.
+   */
   public abstract readonly _tag: string
 
-  /** Optional underlying error that caused this error. Useful for debugging and error chaining. */
+  /** Optional underlying error that caused this error */
   public cause?: unknown
 
-  /** HTTP status code for this error type. Override in subclasses for specific status codes. */
+  /** HTTP status code for this error type */
   static readonly httpStatus: number = 500
 
-  /** The error code/tag for this error type. Must be implemented by subclasses. */
-  static readonly errorCode: string
-
   /**
-   * Generates a Zod schema for this error type.
-   * Used for OpenAPI documentation and runtime validation.
-   */
-  static getSchema() {
-    const errorCode = (this as typeof AbstractError & { errorCode: string })
-      .errorCode
-    return z.object({
-      code: z.literal(errorCode),
-      message: z.string(),
-    })
-  }
-
-  /**
-   * Gets the HTTP status code for this error type.
-   */
-  static getHttpStatus(): number {
-    return (this as typeof AbstractError & { httpStatus: number }).httpStatus
-  }
-
-  /**
-   * Converts this error instance to a format compatible with handler error schemas.
-   *
-   * This method eliminates the need for manual property mapping in handler resolvers
-   * by automatically extracting the `_tag` and `message` properties in the correct format.
-   *
-   * @returns Object with `code` (from `_tag`) and `message` properties that matches handler error schemas
-   *
+   * Creates a new tagged error class with automatic _tag inference.
+   * 
+   * This factory function ensures the _tag is correctly typed as a literal
+   * and provides better ergonomics similar to Effect-TS.
+   * 
    * @example
    * ```typescript
-   * const error = new RedisConnectionError("Connection failed")
-   * return err(error.toHandlerError()) // { code: "RedisConnectionError", message: "Connection failed" }
+   * class UserNotFoundError extends FramewerkError.tagged("UserNotFoundError") {
+   *   static readonly httpStatus = 404
+   *   
+   *   constructor(userId?: string) {
+   *     super(userId ? `User ${userId} not found` : "User not found")
+   *   }
+   * }
    * ```
+   */
+  static tagged<T extends string>(tag: T) {
+    abstract class TaggedFramewerkError extends FramewerkError {
+      readonly _tag = tag as T
+      static readonly errorCode = tag
+      
+      /**
+       * Creates handler error definition with Zod schema
+       */
+      static handlerError(status?: number) {
+        const httpStatus = status ?? (this as typeof TaggedFramewerkError).httpStatus ?? 500
+        return {
+          code: tag,
+          status: httpStatus,
+          schema: z.object({
+            code: z.literal(tag),
+            message: z.string(),
+          }),
+        } as const
+      }
+    }
+    
+    return TaggedFramewerkError
+  }
+
+  /**
+   * Converts this error instance to handler-compatible format
    */
   toHandlerError() {
     return {
@@ -155,32 +206,204 @@ export abstract class AbstractError extends Error {
 
   constructor(message: string, cause?: unknown) {
     super(message)
-    this.name = new.target.name
+    this.name = this.constructor.name
     this.cause = cause
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
 /**
- * Helper function to create consistent handler error definitions.
- *
- * Eliminates boilerplate by generating the error schema object that handlers expect.
- * Each error gets a Zod schema with `code` (literal) and `message` (string) properties.
- *
- * @param tag - The error tag/code (should match the error class `_tag`)
- * @param defaultStatus - Default HTTP status code for this error type
- * @returns Function that creates handler error definition with optional status override
- *
+ * Factory function for creating tagged errors (alternative approach).
+ * 
+ * This provides an even more Effect-TS-like experience where you can
+ * create tagged errors without extending a class.
+ * 
  * @example
  * ```typescript
- * static handlerError = createHandlerError("ValidationError", 400)
- *
+ * export const NetworkError = TaggedError("NetworkError")
+ * export const TimeoutError = TaggedError("TimeoutError")
+ * 
  * // Usage:
- * ValidationError.handlerError()     // Uses default 400 status
- * ValidationError.handlerError(422)  // Override to 422 status
+ * throw new NetworkError("Connection failed")
  * ```
  */
-const createHandlerError = <T extends string>(
+export const TaggedError = <T extends string>(tag: T) => {
+  return class extends FramewerkError {
+    readonly _tag = tag as T
+    static readonly errorCode = tag
+    
+    static handlerError(status?: number) {
+      const httpStatus = status ?? this.httpStatus ?? 500
+      return {
+        code: tag,
+        status: httpStatus,
+        schema: z.object({
+          code: z.literal(tag),
+          message: z.string(),
+        }),
+      } as const
+    }
+
+    constructor(message: string, cause?: unknown) {
+      super(message, cause)
+      this.name = tag
+    }
+  }
+}
+
+/**
+ * @deprecated Use FramewerkError.tagged() or TaggedError() instead
+ * 
+ * Legacy AbstractError class for backward compatibility.
+ * Will be removed in v2.0.0
+ */
+export abstract class AbstractError extends FramewerkError {
+  /** @deprecated Use FramewerkError.tagged() instead */
+  static readonly errorCode: string
+
+  /** @deprecated Use handlerError() method instead */
+  static getSchema() {
+    const errorCode = (this as typeof AbstractError & { errorCode: string })
+      .errorCode
+    return z.object({
+      code: z.literal(errorCode),
+      message: z.string(),
+    })
+  }
+
+  /** @deprecated Use handlerError() method instead */
+  static getHttpStatus(): number {
+    return (this as typeof AbstractError & { httpStatus: number }).httpStatus
+  }
+}
+
+/**
+ * Helper type for creating error unions from multiple error classes
+ */
+export type ErrorUnion<T extends readonly (new (...args: never[]) => FramewerkError)[]> = 
+  T extends readonly (new (...args: never[]) => infer U)[] ? U : never
+
+/**
+ * Helper type to extract the _tag from an error class
+ */
+export type ErrorTag<T extends FramewerkError> = T["_tag"]
+
+/**
+ * Helper type to create a union of error tags
+ */
+export type ErrorTags<T extends readonly FramewerkError[]> = T[number]["_tag"]
+
+// ============================================================================
+// Example Error Classes - Demonstrating both patterns
+// ============================================================================
+
+/**
+ * Pattern 1: Using FramewerkError.tagged() factory (Recommended)
+ */
+
+/**
+ * Error thrown when a user cannot be found.
+ * Common in authentication/authorization and user lookup operations.
+ */
+export class UserNotFoundError extends FramewerkError.tagged("UserNotFoundError") {
+  static readonly httpStatus = 404
+  
+  constructor(userId?: string) {
+    super(userId ? `User ${userId} not found` : "User not found")
+  }
+}
+
+/**
+ * Error thrown when input validation fails.
+ * Used for request validation, form validation, etc.
+ */
+export class ValidationError extends FramewerkError.tagged("ValidationError") {
+  static readonly httpStatus = 400
+  
+  constructor(field: string, reason?: string) {
+    super(reason ? `Validation failed for ${field}: ${reason}` : `Validation failed for ${field}`)
+  }
+}
+
+/**
+ * Error thrown when database operations fail.
+ * Covers connection issues, query failures, transaction problems.
+ */
+export class DatabaseError extends FramewerkError.tagged("DatabaseError") {
+  static readonly httpStatus = 500
+  
+  constructor(operation: string, cause?: unknown) {
+    super(`Database operation failed: ${operation}`, cause)
+  }
+}
+
+/**
+ * Error thrown when authentication fails.
+ * Used for login failures, token validation, etc.
+ */
+export class AuthenticationError extends FramewerkError.tagged("AuthenticationError") {
+  static readonly httpStatus = 401
+  
+  constructor(reason?: string) {
+    super(reason ? `Authentication failed: ${reason}` : "Authentication failed")
+  }
+}
+
+/**
+ * Pattern 2: Using TaggedError factory function
+ */
+
+/**
+ * Redis connection error using factory pattern
+ */
+export const RedisConnectionError = TaggedError("RedisConnectionError")
+
+/**
+ * Network timeout error using factory pattern  
+ */
+export const NetworkTimeoutError = TaggedError("NetworkTimeoutError")
+
+/**
+ * Rate limit exceeded error using factory pattern
+ */
+export const RateLimitError = TaggedError("RateLimitError")
+
+// ============================================================================
+// Migration Examples & Type Demonstrations
+// ============================================================================
+
+/**
+ * Example: Type-safe error union for exhaustive handling
+ */
+export type CommonHandlerErrors = UserNotFoundError | ValidationError | DatabaseError | AuthenticationError
+
+/**
+ * Example: Exhaustive error mapper with compile-time checking
+ */
+export const mapHandlerError = (error: CommonHandlerErrors) => {
+  switch (error._tag) {
+    case "UserNotFoundError":
+      return { code: error._tag, message: "User not found", status: 404 }
+    case "ValidationError":
+      return { code: error._tag, message: "Invalid input", status: 400 }
+    case "DatabaseError":
+      return { code: error._tag, message: "Server error", status: 500 }
+    case "AuthenticationError":
+      return { code: error._tag, message: "Unauthorized", status: 401 }
+    default:
+      // TypeScript will error if any cases are missing
+      const _exhaustive: never = error
+      throw new Error(`Unhandled error: ${_exhaustive}`)
+  }
+}
+
+/**
+ * @deprecated Use FramewerkError.tagged() or TaggedError() instead
+ * 
+ * Helper function to create consistent handler error definitions.
+ * This is kept for backward compatibility but will be removed in v2.0.0
+ */
+export const createHandlerError = <T extends string>(
   tag: T,
   defaultStatus: number
 ) => {
@@ -194,27 +417,3 @@ const createHandlerError = <T extends string>(
       }),
     } as const)
 }
-
-/**
- * Error thrown when a user cannot be found.
- *
- * Typically used for authentication/authorization failures or when
- * a requested user doesn't exist in the system.
- *
- * @example
- * ```typescript
- * throw new UserNotFoundError("User with ID 123 not found")
- * // or
- * return err(new UserNotFoundError().toHandlerError())
- * ```
- */
-// export class UserNotFoundError extends AbstractError {
-//   readonly _tag = "UserNotFoundError" as const
-//   static readonly errorCode = "UserNotFoundError"
-//   static readonly httpStatus = 404
-//   static handlerError = createHandlerError("UserNotFoundError", 404)
-
-//   constructor(message = "User not found", cause?: unknown) {
-//     super(message, cause)
-//   }
-// }

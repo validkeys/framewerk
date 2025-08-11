@@ -31,8 +31,7 @@
     "changeset:version": "changeset version",
     "changeset:publish": "pnpm build && pnpm changeset publish",
     "release": "pnpm build && pnpm changeset:publish",
-    "prepublishOnly": "pnpm test && pnpm build",
-    "autogen:fastify": "tsx src/autogen/cli.ts --generator fastify-routes --search-path ./src --output-dir ./generated/routes"
+    "prepublishOnly": "pnpm test && pnpm build"
   },
   "keywords": [
     "typescript",

@@ -157,8 +157,8 @@ export type HandlerError<Code extends string, S extends z.ZodTypeAny> = {
   schema: S
 }
 
-// Abstract error interface for type constraints
-interface AbstractErrorInterface {
+// Tagged error interface for type constraints (FramewerkError compatibility)
+interface TaggedErrorInterface {
   readonly _tag: string
   name: string
   message: string
@@ -167,9 +167,10 @@ interface AbstractErrorInterface {
 
 // Error class constructor interface with static methods
 type ErrorClassConstructor = {
-  new (message: string, cause?: unknown): AbstractErrorInterface
+  new (...args: any[]): TaggedErrorInterface
   httpStatus?: number
-  getSchema?(): z.ZodTypeAny
+  handlerError?: (status?: number) => { code: string; status: number; schema: z.ZodTypeAny }
+  getSchema?(): z.ZodTypeAny // Legacy AbstractError support
 }
 
 // Type to extract union of error instances from array of error class constructors
@@ -349,7 +350,7 @@ export class HandlerBuilder<
       TErrors,
       TDeps
     >
-  ) {
+  ): HandlerFactory<z.infer<TInput>, z.infer<TOutput>, ErrorUnionFromClasses<TErrors>, TDeps> {
     // At this point, TypeScript knows all required fields are set
     const { input, output, resolver, errors } = this.config
 
@@ -406,8 +407,7 @@ export class HandlerBuilder<
         return resolverWithDeps(parsed.data, options, ctx)
       }
 
-      return {
-        [HandlerMarker]: true,
+      const result = {
         Input: inputSchema,
         Output: outputSchema,
         ErrorOutput,
@@ -425,7 +425,17 @@ export class HandlerBuilder<
           })),
         },
         method,
-      }
+      } as const
+
+      // Add the marker as a non-enumerable property to avoid type leakage
+      Object.defineProperty(result, HandlerMarker, {
+        value: true,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      })
+
+      return result
     }
   }
 }
@@ -449,8 +459,31 @@ export function defineHandler(operationId: string, description: string) {
   })
 }
 
+// Handler result interface to hide internal marker from type signatures
+export interface HandlerFactory<TInput, TOutput, TErrors, TDeps> {
+  (deps: TDeps): {
+    readonly Input: z.ZodTypeAny
+    readonly Output: z.ZodTypeAny
+    readonly ErrorOutput: z.ZodTypeAny
+    readonly errors: Record<string, HandlerError<string, z.ZodTypeAny>>
+    readonly metadata: {
+      operationId: string
+      description: string
+      tags?: string[]
+      auth?: HandlerAuth
+      private?: boolean
+      errors: Array<{
+        code: string
+        status: number
+        schema: z.ZodTypeAny
+      }>
+    }
+    readonly method: HandlerMethod<TInput, TOutput, TErrors>
+  }
+}
+
 // Type helpers
-export type AnyHandler = ReturnType<ReturnType<typeof defineHandler>["build"]>
+export type AnyHandler = HandlerFactory<any, any, any, any>
 export type HandlerInput<H extends AnyHandler> = H extends (deps: unknown) => {
   Input: infer I
 }
