@@ -1,38 +1,18 @@
 # @framewerk/core
 
-A complete service/action architecture toolkit with type-safe builders and codegen support for TypeScript applications.
+A complete service/action architecture toolkit with type-safe builders and dependency injection for TypeScript applications.
 
 ## Features
 
 - 🎯 **Type-Safe Service Architecture** - Define services with full TypeScript type safety
 - 🔧 **Dependency Injection** - Built-in DI system with type-safe dependencies
 - 📝 **Contract System** - Extract and share API contracts between packages
-- 🧪 **Testing Utilities** - Comprehensive testing tools with mocks and fixtures
+- 🧪 **Testing Utilities** - Test-runner agnostic testing tools for Framewerk services
 - 🔍 **Introspection** - Runtime metadata and OpenAPI generation
 - 📦 **Monorepo Ready** - Designed for scalable monorepo architectures
 - ✨ **Effect-TS Inspired Errors** - Tagged error system with exhaustive type checking
 - 🚀 **Zero Type Visibility Issues** - Export handlers without TypeScript compilation errors
-
-## TypeScript Integration
-
-Framewerk is designed for seamless TypeScript integration:
-
-```typescript
-// ✅ Export handlers without "cannot be named" errors
-export const getUserHandler = defineHandler("getUser", "Get user by ID")
-  .input(z.object({ userId: z.string() }))
-  .output(z.object({ id: z.string(), name: z.string() }))
-  .errors([UserNotFoundError] as const)
-  .withDependencies<Dependencies>()
-  .resolver((deps) => async (input) => {
-    // Resolvers return error instances for type safety
-    return err(new UserNotFoundError(input.userId))
-  })
-  .build()
-
-// ✅ No TypeScript visibility issues in consuming applications
-export { getUserHandler }
-```
+- 🔄 **Hybrid API** - Choose between namespace or named export patterns
 
 ## Installation
 
@@ -44,68 +24,142 @@ pnpm add @framewerk/core neverthrow
 yarn add @framewerk/core neverthrow
 ```
 
-## Quick Start
+## Import Strategies
 
-### 1. Define Your Service Dependencies
+Framewerk provides flexible import patterns to suit your preferences:
 
-```typescript
-interface UserServiceDeps {
-  database: {
-    findUser: (id: string) => Promise<User | null>
-    createUser: (data: CreateUserData) => Promise<User>
-  }
-  logger: {
-    info: (message: string) => void
-    error: (message: string, error?: Error) => void
-  }
-}
-```
-
-### 2. Create Handler Definitions
+### Namespace Import (Recommended)
 
 ```typescript
-import { defineService, type HandlerDefinition } from '@framewerk/core'
-import { ok, err } from 'neverthrow'
+import { Framewerk } from '@framewerk/core'
 
-const getUserHandler: HandlerDefinition<
-  { id: string },
-  User,
-  Error,
-  UserServiceDeps
-> = async (input, options, ctx) => {
-  const user = await ctx.database.findUser(input.id)
-  if (!user) {
-    return err(new Error('User not found'))
-  }
-  return ok(user)
-}
-```
-
-### 3. Build Your Service
-
-```typescript
-const userService = defineService("UserService")
-  .withServiceDependencies<UserServiceDeps>()
-  .addHandler('getUser', getUserHandler)
-  .addHandler('createUser', createUserHandler)
+// Define services
+const service = Framewerk.defineService('UserService')
+  .withServiceDependencies<UserDeps>()
+  .addHandler('getUser', handler)
   .build()
-```
 
-### 4. Use Your Service
+// Define handlers
+const handler = Framewerk.defineHandler('getUser', 'Get user by ID')
+  .withInput<GetUserInput>()
+  .withOutput<User>()
+  .handler(async (input, options, ctx) => {
+    // Implementation
+  })
 
-```typescript
-const dependencies: UserServiceDeps = {
-  database: new DatabaseService(),
-  logger: new Logger()
+// Create errors
+class UserNotFoundError extends Framewerk.Error.tagged('UserNotFoundError') {
+  constructor(userId: string) {
+    super(`User not found: ${userId}`)
+  }
 }
 
-const service = userService.make(dependencies)
-const result = await service.getUser({ id: '123' })
+// Testing utilities
+const harness = Framewerk.Testing.createHarness(service, mockDeps)
+```
 
-if (result.isOk()) {
-  console.log('User:', result.value)
-} else {
-  console.error('Error:', result.error)
+### Named Exports (Individual Imports)
+
+```typescript
+import { 
+  defineService, 
+  defineHandler, 
+  FramewerkError,
+  createServiceTestHarness 
+} from '@framewerk/core'
+
+// Same functionality, individual imports
+const service = defineService('UserService')
+const handler = defineHandler('getUser', 'Get user by ID')
+class UserNotFoundError extends FramewerkError.tagged('UserNotFoundError') {}
+const harness = createServiceTestHarness(service, mockDeps)
+```
+
+### Mixed Approach
+
+```typescript
+// Use whatever feels most natural for your team
+import { Framewerk, defineService, FramewerkError } from '@framewerk/core'
+
+const service = defineService('UserService')  // Named export
+const handler = Framewerk.defineHandler('getUser', 'Description')  // Namespace
+class MyError extends FramewerkError.tagged('MyError') {}  // Named export
+```
+
+## Error Handling (New Pattern)
+
+Framewerk uses Effect-TS inspired tagged errors for type-safe error handling:
+
+### Creating Tagged Errors
+
+```typescript
+// Using namespace import
+class UserNotFoundError extends Framewerk.Error.tagged('UserNotFoundError') {
+  static readonly httpStatus = 404
+  
+  constructor(userId: string) {
+    super(`User not found: ${userId}`)
+  }
+}
+
+// Using named export
+import { FramewerkError } from '@framewerk/core'
+
+class ValidationError extends FramewerkError.tagged('ValidationError') {
+  static readonly httpStatus = 400
+  
+  constructor(field: string, message: string) {
+    super(`Validation failed for ${field}: ${message}`)
+  }
+}
+
+// Factory function pattern
+const NetworkError = Framewerk.Error.tagged('NetworkError')
+class ConnectionError extends NetworkError {
+  constructor(url: string) {
+    super(`Failed to connect to ${url}`)
+  }
+}
+```
+
+### Using Tagged Errors
+
+```typescript
+const getUserHandler = Framewerk.defineHandler('getUser', 'Get user by ID')
+  .withInput<{ id: string }>()
+  .withOutput<User>()
+  .handler(async (input, options, ctx) => {
+    try {
+      const user = await ctx.database.findUser(input.id)
+      if (!user) {
+        return err(new UserNotFoundError(input.id))
+      }
+      return ok(user)
+    } catch (dbError) {
+      return err(new DatabaseError('Failed to query user', dbError))
+    }
+  })
+```
+
+### Exhaustive Error Handling
+
+```typescript
+// All errors have a _tag property for exhaustive checking
+const handleUserResult = (result: Result<User, UserNotFoundError | ValidationError>) => {
+  if (result.isErr()) {
+    switch (result.error._tag) {
+      case 'UserNotFoundError':
+        return { status: 404, message: 'User not found' }
+      case 'ValidationError':
+        return { status: 400, message: 'Invalid input' }
+      default:
+        // TypeScript ensures this is unreachable
+        const _exhaustive: never = result.error
+        return _exhaustive
+    }
+  }
+  
+  return { status: 200, data: result.value }
 }
 ```
 

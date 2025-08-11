@@ -2,13 +2,13 @@
  * Test for the contract type system
  */
 
-import { defineService } from "./service.ts"
-import { HandlerDefinition } from "./service.ts"
+import { defineService } from "../service.ts"
+import { HandlerDefinition } from "../service.ts"
 import { 
   ServiceHandlerContracts,
   defineHandlerContract,
   createServiceContracts
-} from "./contracts.ts"
+} from "../contracts.ts"
 import { ok, err } from "neverthrow"
 
 console.log("🧪 Testing contract type system...")

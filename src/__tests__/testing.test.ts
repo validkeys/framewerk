@@ -8,9 +8,9 @@ import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vites
 import { ok, err } from 'neverthrow'
 
 // Import modules to test
-import { defineService, type HandlerDefinition, type ServiceDefinition } from './service'
-import { ServiceInspector } from './introspection'
-import { createServiceTestHarness, ResultTestUtils, PerformanceTestUtils } from './testing'
+import { defineService, type HandlerDefinition, type ServiceDefinition } from '../service'
+import { ServiceInspector } from '../introspection'
+import { createServiceTestHarness, ResultTestUtils, PerformanceTestUtils } from '../testing'
 
 // Mock factories for testing (moved from testing.ts)
 const MockFactories = {

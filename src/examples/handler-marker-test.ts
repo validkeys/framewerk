@@ -4,8 +4,8 @@
  */
 
 import { z } from 'zod'
-import { defineHandler, HandlerMarker } from './handler'
-import { FramewerkError } from './errors'
+import { defineHandler, HandlerMarker } from '../handler'
+import { FramewerkError } from '../errors'
 import { ok } from 'neverthrow'
 
 // Create a simple error for testing

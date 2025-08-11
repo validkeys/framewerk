@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { defineService, HandlerDefinition } from './service'
-import { ServiceInspector, ServiceRegistry } from './introspection'
+import { defineService, HandlerDefinition } from '../service'
+import { ServiceInspector, ServiceRegistry } from '../introspection'
 import { ok } from 'neverthrow'
 
 // Example schemas for testing

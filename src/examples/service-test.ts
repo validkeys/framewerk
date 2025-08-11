@@ -4,8 +4,8 @@
 
 console.log("Starting service test import...")
 
-import { defineService } from "./service.ts"
-import { HandlerDefinition } from "./service.ts"
+import { defineService } from "../service.ts"
+import { HandlerDefinition } from "../service.ts"
 import { ok } from "neverthrow"
 
 console.log("Imports completed")

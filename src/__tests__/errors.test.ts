@@ -9,9 +9,15 @@ import {
   DatabaseError,
   AuthenticationError,
   RedisConnectionError,
-  mapHandlerError,
-  type CommonHandlerErrors
-} from './errors'
+  NetworkTimeoutError,
+  RateLimitError,
+  FramewerkError,
+  TaggedError,
+  AbstractError,
+  type CommonHandlerErrors,
+  createHandlerError,
+  mapHandlerError
+} from '../errors'
 
 describe('FramewerkError System', () => {
   describe('FramewerkError.tagged() pattern', () => {

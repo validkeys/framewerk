@@ -4,13 +4,13 @@
 
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { defineHandler } from './handler'
+import { defineHandler } from '../handler'
 import { 
   UserNotFoundError, 
   ValidationError, 
   DatabaseError,
   FramewerkError
-} from './errors'
+} from '../errors'
 
 describe('Handler Error Integration', () => {
   describe('FramewerkError.tagged() with Handler Errors', () => {

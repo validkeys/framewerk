@@ -9,9 +9,9 @@
 // EXAMPLE 1: Service Package (exports both implementation and contracts)
 // ============================================================================
 
-import { defineService } from "./service.ts"
-import { HandlerDefinition } from "./service.ts"
-import { ServiceHandlerContracts, createServiceContracts } from "./contracts.ts"
+import { defineService } from "../service.ts"
+import { HandlerDefinition } from "../service.ts"
+import { ServiceHandlerContracts, createServiceContracts } from "../contracts.ts"
 import { ok, err } from "neverthrow"
 
 // Service dependencies (internal to this package)

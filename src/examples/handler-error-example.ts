@@ -6,9 +6,9 @@
  */
 
 import { z } from 'zod'
-import { defineHandler } from './handler'
-import { defineService, type HandlerDefinition } from './service'
-import { FramewerkError } from './errors'
+import { defineHandler } from '../handler'
+import { defineService, type HandlerDefinition } from '../service'
+import { FramewerkError } from '../errors'
 import { ok, err } from 'neverthrow'
 
 // ============================================================================
