@@ -398,12 +398,12 @@ export class HandlerBuilder<
         z.infer<TInput>,
         z.infer<TOutput>,
         ErrorUnionFromClasses<TErrors>
-      > = async (input, ctx) => {
+      > = async (input, options, ctx) => {
         const parsed = inputSchema.safeParse(input)
         if (!parsed.success) {
           throw new Error(`Invalid input: ${parsed.error.message}`)
         }
-        return resolverWithDeps(parsed.data, ctx)
+        return resolverWithDeps(parsed.data, options, ctx)
       }
 
       return {

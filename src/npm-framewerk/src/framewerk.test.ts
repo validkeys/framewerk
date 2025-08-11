@@ -9,10 +9,10 @@ import { ok, err } from 'neverthrow'
 import { z } from 'zod'
 
 // Import modules to test
-import { defineService, type HandlerDefinition } from './service'
+import { defineService, type HandlerDefinition, type ServiceDefinition } from './service'
 import { ServiceInspector, ServiceRegistry } from './introspection'
 
-// Test schemas
+// Test schemas - ensure they can be used both as types and runtime values
 const UserSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -23,6 +23,10 @@ const CreateUserSchema = z.object({
   name: z.string(),
   email: z.string()
 })
+
+// Ensure schemas are valid at runtime
+UserSchema.parse({ id: '1', name: 'Test', email: 'test@example.com' })
+CreateUserSchema.parse({ name: 'Test', email: 'test@example.com' })
 
 // Test dependencies interface
 interface TestDeps {
@@ -183,7 +187,7 @@ describe('Framewerk Core', () => {
   })
 
   describe('Introspection System', () => {
-    let userService: ReturnType<typeof defineService>
+    let userService: ServiceDefinition<"UserService", TestDeps>
 
     beforeEach(() => {
       const getUserHandler: HandlerDefinition<
@@ -244,8 +248,8 @@ describe('Framewerk Core', () => {
   })
 
   describe('Service Registry', () => {
-    let userService: ReturnType<typeof defineService>
-    let orderService: ReturnType<typeof defineService>
+    let userService: ServiceDefinition<"UserService", TestDeps>
+    let orderService: ServiceDefinition<"OrderService", TestDeps>
 
     beforeEach(() => {
       const getUserHandler: HandlerDefinition<
@@ -263,7 +267,7 @@ describe('Framewerk Core', () => {
         { id: string; userId: string; total: number },
         Error,
         TestDeps
-      > = async (input, _options, _ctx) => {
+      > = async (input) => {
         return ok({
           id: 'order-123',
           userId: input.userId,
@@ -332,17 +336,17 @@ describe('Framewerk Core', () => {
   describe('Contract System', () => {
     it.skip('should extract contract types from service definitions', () => {
       // This feature is not yet implemented
-      // Mock a package.json structure
-      const mockPackageStructure = {
-        'src/services/user/types.ts': `
-          export interface GetUserRequest { id: string }
-          export interface GetUserResponse { id: string; name: string }
-        `,
-        'src/services/order/types.ts': `
-          export interface CreateOrderRequest { userId: string; total: number }
-          export interface CreateOrderResponse { id: string; userId: string; total: number }
-        `
-      }
+      // Mock a package.json structure (this test is commented out for now)
+      // const mockPackageStructure = {
+      //   'src/services/user/types.ts': `
+      //     export interface GetUserRequest { id: string }
+      //     export interface GetUserResponse { id: string; name: string }
+      //   `,
+      //   'src/services/order/types.ts': `
+      //     export interface CreateOrderRequest { userId: string; total: number }
+      //     export interface CreateOrderResponse { id: string; userId: string; total: number }
+      //   `
+      // }
 
       // const contracts = extractContractTypes(mockPackageStructure)
 
@@ -358,7 +362,7 @@ describe('Framewerk Core', () => {
         never,
         Error,
         TestDeps
-      > = async (_input, _options, _ctx) => {
+      > = async () => {
         return err(new Error('Something went wrong'))
       }
 
@@ -384,7 +388,7 @@ describe('Framewerk Core', () => {
 
       expect(result.isErr()).toBe(true)
       if (result.isErr()) {
-        expect(result.error.message).toBe('Something went wrong')
+        expect((result.error as Error).message).toBe('Something went wrong')
       }
     })
   })

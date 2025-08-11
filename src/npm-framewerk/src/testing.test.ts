@@ -4,16 +4,16 @@
  * Demonstrates the testing utilities in action with realistic examples
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest'
 import { ok, err } from 'neverthrow'
 
 // Import modules to test
-import { defineService, type HandlerDefinition } from './service'
+import { defineService, type HandlerDefinition, type ServiceDefinition } from './service'
 import { ServiceInspector } from './introspection'
 import { createServiceTestHarness, MockFactories, TestFixtures, ResultTestUtils, PerformanceTestUtils } from './testing'
 
 // Test dependencies interface
-interface UserServiceDeps {
+interface UserServiceDeps extends Record<string, unknown> {
   database: {
     findUser: (id: string) => Promise<{ id: string; name: string; email: string } | null>
     createUser: (data: { name: string; email: string }) => Promise<{ id: string; name: string; email: string }>
@@ -30,9 +30,27 @@ interface UserServiceDeps {
   }
 }
 
+// Type for mocked dependencies
+type MockedUserServiceDeps = {
+  database: {
+    findUser: MockedFunction<(id: string) => Promise<{ id: string; name: string; email: string } | null>>
+    createUser: MockedFunction<(data: { name: string; email: string }) => Promise<{ id: string; name: string; email: string }>>
+    updateUser: MockedFunction<(id: string, data: Partial<{ name: string; email: string }>) => Promise<{ id: string; name: string; email: string }>>
+  }
+  logger: {
+    info: MockedFunction<(message: string) => void>
+    error: MockedFunction<(message: string, error?: Error) => void>
+    warn: MockedFunction<(message: string) => void>
+  }
+  cache: {
+    get: MockedFunction<(key: string) => Promise<unknown | null>>
+    set: MockedFunction<(key: string, value: unknown, ttl?: number) => Promise<void>>
+  }
+} & Record<string, unknown>
+
 describe('Testing Utilities Demo', () => {
-  let userService: any
-  let mockDeps: UserServiceDeps
+  let userService: ServiceDefinition<string, UserServiceDeps>
+  let mockDeps: MockedUserServiceDeps
 
   beforeEach(() => {
     // Create comprehensive mock dependencies using the testing utilities
@@ -178,7 +196,7 @@ describe('Testing Utilities Demo', () => {
       const result = await testHarness.callHandler('getUser', { id: '999' })
 
       const error = ResultTestUtils.expectErr(result)
-      expect(error.message).toBe('User not found')
+      expect((error as Error).message).toBe('User not found')
 
       // Assert error was logged
       testHarness.assertMockCalled('logger.error', 1)
@@ -325,16 +343,16 @@ describe('Testing Utilities Demo', () => {
 
   describe('Performance Testing', () => {
     it('should measure handler performance', async () => {
-      // Create the test harness with type assertion to bypass the strict typing
-      const testHarness = createServiceTestHarness(userService as any, mockDeps as any)
+      // Create the test harness (skipping strict types for this performance test)
+      const testHarness = createServiceTestHarness(userService as unknown as ServiceDefinition<string, Record<string, unknown>>, mockDeps as Record<string, unknown>)
       
       // Verify the harness was created correctly
       expect(testHarness).toBeDefined()
       expect(testHarness.service).toBeDefined()
       
       // Mock fast response
-      const dbMock = mockDeps.database.findUser as unknown as any
-      const cacheMock = mockDeps.cache.get as unknown as any
+      const dbMock = mockDeps.database.findUser as MockedFunction<typeof mockDeps.database.findUser>
+      const cacheMock = mockDeps.cache.get as MockedFunction<typeof mockDeps.cache.get>
       
       dbMock.mockResolvedValue({
         id: '123',

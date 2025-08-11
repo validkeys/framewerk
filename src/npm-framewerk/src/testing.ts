@@ -50,7 +50,7 @@ export function createServiceTestHarness<
   const serviceInstance = service.make(dependencies)
 
   return {
-    service: serviceInstance,
+    service: serviceInstance as ReturnType<TService['make']>,
     mockDependencies: dependencies,
     
     callHandler: async <TInput, TOutput, TError>(

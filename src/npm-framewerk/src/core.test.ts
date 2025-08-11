@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ok, err } from 'neverthrow'
 
 // Import modules to test
-import { defineService, type HandlerDefinition } from './service'
+import { defineService, type HandlerDefinition, type ServiceDefinition } from './service'
 import { ServiceInspector, ServiceRegistry } from './introspection'
 
 // Test dependencies interface
@@ -146,7 +146,7 @@ describe('Framewerk Core Functionality', () => {
   })
 
   describe('Introspection System', () => {
-    let userService: ReturnType<typeof defineService>
+    let userService: ServiceDefinition<string, TestDeps>
 
     beforeEach(() => {
       const getUserHandler: HandlerDefinition<
@@ -196,7 +196,7 @@ describe('Framewerk Core Functionality', () => {
       expect(Object.keys(openApi.paths)).toContain('/getUser')
       
       // Check the structure of a path
-      const getUserPath = openApi.paths['/getUser'] as any
+      const getUserPath = openApi.paths['/getUser'] as Record<string, unknown>
       expect(getUserPath).toHaveProperty('post')
       expect(getUserPath.post).toHaveProperty('summary')
       expect(getUserPath.post).toHaveProperty('tags')
@@ -213,8 +213,8 @@ describe('Framewerk Core Functionality', () => {
   })
 
   describe('Service Registry', () => {
-    let userService: ReturnType<typeof defineService>
-    let orderService: ReturnType<typeof defineService>
+    let userService: ServiceDefinition<string, TestDeps>
+    let orderService: ServiceDefinition<string, TestDeps>
 
     beforeEach(() => {
       const getUserHandler: HandlerDefinition<
@@ -232,7 +232,7 @@ describe('Framewerk Core Functionality', () => {
         { id: string; userId: string; total: number },
         Error,
         TestDeps
-      > = async (input, _options, _ctx) => {
+      > = async (input) => {
         return ok({
           id: 'order-123',
           userId: input.userId,
@@ -340,7 +340,7 @@ describe('Framewerk Core Functionality', () => {
 
       expect(result.isErr()).toBe(true)
       if (result.isErr()) {
-        expect(result.error.message).toBe('User not found')
+        expect((result.error as Error).message).toBe('User not found')
       }
     })
   })
